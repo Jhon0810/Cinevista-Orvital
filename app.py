@@ -21,7 +21,7 @@ import filetype
 import io
 
 app = Flask(__name__)
-app.secret_key = 'una_clave_secreta_larga_y_aleatoria'  # Cambia esto por una clave segura
+app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://Jhon:RTJh0n_2025@DESKTOP-PTO39EK\\PCGAMER_5:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
