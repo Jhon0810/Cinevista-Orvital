@@ -19,42 +19,71 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_caching import Cache
 import filetype
 import io
-from app import Mensaje
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "clave_secreta_segura")
-
-# ✅ Nueva conexión a PostgreSQL de Render:
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://cinedb_hjod_user:8yEpW4CPOwoEMSXT8og1twzVwaPsM282@dpg-d1eruradbo4c73ess1a0-a/cinedb_hjod'
-
+app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://Jhon:RTJh0n_2025@DESKTOP-PTO39EK\\PCGAMER_5:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
-
-db = SQLAlchemy(app)
 cache = Cache(app)
+db = SQLAlchemy(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Validación de archivos
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi'}
 
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.info("Servidor Flask iniciado correctamente.")
+
+# Conexión a SQL Server
+def get_db_connection():
+    try:
+        connection = pyodbc.connect(
+            'DRIVER={ODBC Driver 18 for SQL Server};'
+            'SERVER=DESKTOP-PTO39EK\\PCGAMER_5,1433;'
+            'DATABASE=CineDB;'
+            'UID=Jhon;'
+            'PWD=RTJh0n_2026;'
+            'TrustServerCertificate=yes;'
+            'Encrypt=no;'
+        )
+        logging.info("Conexión exitosa a la base de datos.")
+        return connection
+    except pyodbc.Error as e:
+        logging.error(f"Error en la conexión: {e}")
+        raise
+
+def handle_db_error(error):
+    return jsonify({'success': False, 'error': str(error), 'message': 'Error en la base de datos'}), 500
+
+def with_db_connection(f):
+    def wrapper(*args, **kwargs):
+        conn = None
+        try:
+            conn = get_db_connection()
+            return f(conn, *args, **kwargs)
+        except pyodbc.Error as e:
+            return handle_db_error(e)
+        finally:
+            if conn:
+                conn.close()
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+# Validación de archivos
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 # Código secreto para administradores
 ADMIN_SECRET_CODE = "985634"
 
-# Modelo para la tabla usuarios
-class Usuario(db.Model):
-    __tablename__ = 'usuarios'
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    is_admin = db.Column(db.Boolean, default=False)
 
-# Tu clase personalizada, igual que antes
 class User(UserMixin):
     def __init__(self, id, email, password, is_admin=False):
         self.id = id
@@ -62,36 +91,16 @@ class User(UserMixin):
         self.password = password
         self.is_admin = is_admin
 
-# Login loader que respeta tu lógica
 @login_manager.user_loader
 def load_user(user_id):
-    usuario = Usuario.query.filter_by(id=user_id).first()
-    if usuario:
-        return User(usuario.id, usuario.email, usuario.password, usuario.is_admin)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, password, is_admin FROM Usuarios WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return User(*row)
     return None
-
-
-
-class Pelicula(db.Model):
-    __tablename__ = 'peliculas'
-    id = db.Column(db.Integer, primary_key=True)
-    titulo = db.Column(db.String(100))
-    genero = db.Column(db.String(50))
-    duracion = db.Column(db.String(20))
-    imagen = db.Column(db.LargeBinary)
-    trailer = db.Column(db.String(255))
-
-class PeliculaCompleta(db.Model):
-    __tablename__ = 'peliculas_completas'
-    id = db.Column(db.Integer, primary_key=True)
-    titulo = db.Column(db.String(100))
-    genero = db.Column(db.String(50))
-    duracion = db.Column(db.String(20))
-    imagen = db.Column(db.LargeBinary)
-    pelicula_completa = db.Column(db.String(255))
-
-
-
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -105,22 +114,24 @@ def register():
             flash('Código de administrador incorrecto', 'error')
             return redirect(url_for('register'))
 
-        # Reemplazo de pyodbc: usar SQLAlchemy
-        usuario_existente = Usuario.query.filter_by(email=email).first()
-        if usuario_existente:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM Usuarios WHERE email = ?", (email,))
+        if cursor.fetchone()[0] > 0:
+            conn.close()
             flash('El correo electrónico ya está registrado', 'error')
             return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password)
-        nuevo_usuario = Usuario(email=email, password=hashed_password, is_admin=is_admin)
-        db.session.add(nuevo_usuario)
-        db.session.commit()
+        cursor.execute("INSERT INTO Usuarios (email, password, is_admin) VALUES (?, ?, ?)",
+                       (email, hashed_password, is_admin))
+        conn.commit()
+        conn.close()
 
         flash('Registro exitoso. Por favor, inicia sesión.', 'success')
         return redirect(url_for('login'))
 
     return render_template('register.html', logo_url=url_for('obtener_logo'))
-
 
 
 
@@ -133,23 +144,24 @@ def login():
         email = request.form['email']
         password = request.form['password']
 
-        # 🔁 Reemplazamos la consulta con SQLAlchemy
-        usuario = Usuario.query.filter_by(email=email).first()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, email, password, is_admin FROM Usuarios WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        conn.close()
 
-        if usuario and check_password_hash(usuario.password, password):
-            if usuario.is_admin and request.form.get('admin_code') != ADMIN_SECRET_CODE:
+        if row and check_password_hash(row[2], password):
+            if row[3] and request.form.get('admin_code') != ADMIN_SECRET_CODE:
                 flash('Código de administrador incorrecto', 'error')
                 return redirect(url_for('login'))
 
-            # Creamos objeto User para login_user
-            user = User(usuario.id, usuario.email, usuario.password, usuario.is_admin)
+            user = User(*row)
             login_user(user)
             return redirect(url_for('index'))
         else:
             flash('Email o contraseña incorrectos', 'error')
 
     return render_template('login.html', logo_url=url_for('obtener_logo'))
-
 
 
 @app.route('/logout')
@@ -184,38 +196,50 @@ def index():
 @cache.cached(timeout=300)
 def cartelera():
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
         # Obtener trailers paginados
         page = int(request.args.get('page', 1))
         per_page = 9
         offset = (page - 1) * per_page
 
-        peliculas_query = Pelicula.query.order_by(Pelicula.id.desc()).offset(offset).limit(per_page).all()
+        cursor.execute("""
+            SELECT id, titulo, genero, duracion, imagen, trailer
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (ORDER BY id DESC) AS rownum
+                FROM Peliculas
+            ) AS paged
+            WHERE rownum BETWEEN ? AND ?
+        """, offset + 1, offset + per_page)
 
         peliculas = [
             {
-                "id": peli.id,
-                "titulo": peli.titulo,
-                "genero": peli.genero,
-                "duracion": peli.duracion,
-                "imagen": f"data:image/jpeg;base64,{base64.b64encode(peli.imagen).decode('utf-8')}" if peli.imagen else None,
-                "trailer": peli.trailer,
+                "id": row[0],
+                "titulo": row[1],
+                "genero": row[2],
+                "duracion": row[3],
+                "imagen": f"data:image/jpeg;base64,{base64.b64encode(row[4]).decode('utf-8')}" if row[4] else None,
+                "trailer": row[5],
             }
-            for peli in peliculas_query
+            for row in cursor.fetchall()
         ]
 
-        # Obtener películas completas
-        peliculas_completas_query = PeliculaCompleta.query.all()
+        # Películas completas (sin base64, se usa ruta directa a endpoints)
+        cursor.execute("SELECT id, titulo, genero, duracion FROM Peliculas_Completas")
         peliculas_completas = [
             {
-                "id": peli.id,
-                "titulo": peli.titulo,
-                "genero": peli.genero,
-                "duracion": peli.duracion,
-                "imagen": url_for('obtener_imagen_pelicula_completa', id=peli.id),
-                "pelicula_completa": url_for('obtener_video_pelicula_completa', id=peli.id),
+                "id": row[0],
+                "titulo": row[1],
+                "genero": row[2],
+                "duracion": row[3],
+                "imagen": url_for('obtener_imagen_pelicula_completa', id=row[0]),
+                "pelicula_completa": url_for('obtener_video_pelicula_completa', id=row[0]),
             }
-            for peli in peliculas_completas_query
+            for row in cursor.fetchall()
         ]
+
+        conn.close()
 
         return render_template(
             'cartelera.html',
@@ -227,9 +251,8 @@ def cartelera():
             logo_url=url_for('obtener_logo')
         )
 
-    except Exception as e:
+    except pyodbc.Error as e:
         return jsonify({'error': str(e)})
-
 
 
 
@@ -238,93 +261,110 @@ def cartelera():
 
 @app.route('/buscar')
 def buscar():
-    query = request.args.get('q', '').strip().lower()
+    query = request.args.get('q', '').strip()
     es_trailer = request.args.get('es_trailer', 'true') == 'true'
-
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
     try:
-        peliculas = []
-
         if es_trailer:
-            resultados = Pelicula.query.filter(
-                (Pelicula.titulo.ilike(f'%{query}%')) | 
-                (Pelicula.genero.ilike(f'%{query}%'))
-            ).all()
-
-            for fila in resultados:
-                imagen = None
-                if fila.imagen:
-                    imagen_base64 = base64.b64encode(fila.imagen).decode('utf-8')
-                    imagen = f"data:image/jpeg;base64,{imagen_base64}"
-
-                peliculas.append({
-                    'id': fila.id,
-                    'titulo': fila.titulo,
-                    'genero': fila.genero,
-                    'duracion': fila.duracion,
-                    'imagen': imagen,
-                    'trailer': fila.trailer
-                })
-
+            sql = """
+                SELECT id, titulo, genero, duracion, imagen, trailer 
+                FROM Peliculas 
+                WHERE LOWER(titulo) LIKE ? OR LOWER(genero) LIKE ?
+            """
         else:
-            resultados = PeliculaCompleta.query.filter(
-                (PeliculaCompleta.titulo.ilike(f'%{query}%')) | 
-                (PeliculaCompleta.genero.ilike(f'%{query}%'))
-            ).all()
+            sql = """
+                SELECT id, titulo, genero, duracion, imagen 
+                FROM Peliculas_Completas 
+                WHERE LOWER(titulo) LIKE ? OR LOWER(genero) LIKE ?
+            """
+        
+        like_query = f"%{query.lower()}%"
+        cursor.execute(sql, (like_query, like_query))
+        filas = cursor.fetchall()
+        
+        peliculas = []
+        for fila in filas:
+            id_pelicula = fila[0]
+            titulo = fila[1]
+            genero = fila[2]
+            duracion = fila[3]
+            imagen_blob = fila[4]
+            
+            # Convertir imagen binaria a base64
+            imagen = None
+            if imagen_blob:
+                imagen_base64 = base64.b64encode(imagen_blob).decode('utf-8')
+                imagen = f"data:image/jpeg;base64,{imagen_base64}"
 
-            for fila in resultados:
-                imagen = None
-                if fila.imagen:
-                    imagen_base64 = base64.b64encode(fila.imagen).decode('utf-8')
-                    imagen = f"data:image/jpeg;base64,{imagen_base64}"
-
-                peliculas.append({
-                    'id': fila.id,
-                    'titulo': fila.titulo,
-                    'genero': fila.genero,
-                    'duracion': fila.duracion,
+            if es_trailer:
+                trailer_url = fila[5]
+                pelicula = {
+                    'id': id_pelicula,
+                    'titulo': titulo,
+                    'genero': genero,
+                    'duracion': duracion,
                     'imagen': imagen,
-                    'pelicula_completa': url_for('obtener_video_pelicula_completa', id=fila.id)
-                })
-
+                    'trailer': trailer_url
+                }
+            else:
+                pelicula_completa_url = url_for('obtener_video_pelicula_completa', id=id_pelicula)
+                pelicula = {
+                    'id': id_pelicula,
+                    'titulo': titulo,
+                    'genero': genero,
+                    'duracion': duracion,
+                    'imagen': imagen,
+                    'pelicula_completa': pelicula_completa_url
+                }
+            
+            peliculas.append(pelicula)
+        
         return jsonify(peliculas)
 
     except Exception as e:
         print(f"Error al buscar películas: {e}")
         return jsonify({'error': 'Error en la búsqueda'}), 500
-
+    finally:
+        conn.close()
 
 
 
 
 @app.route('/admin')
 @login_required
-def admin():
+@with_db_connection
+def admin(conn):
     try:
+        cursor = conn.cursor()
+
         # Obtener las películas con tráiler
-        peliculas_query = Pelicula.query.all()
+        cursor.execute("SELECT id, titulo, genero, duracion, imagen, trailer FROM Peliculas")
         peliculas = [
             {
-                "id": row.id,
-                "titulo": row.titulo,
-                "genero": row.genero,
-                "duracion": row.duracion,
-                "imagen": row.imagen,
-                "trailer": row.trailer,
+                "id": row[0],
+                "titulo": row[1],
+                "genero": row[2],
+                "duracion": row[3],
+                "imagen": row[4],
+                "trailer": row[5],
             }
-            for row in peliculas_query
+            for row in cursor.fetchall()
         ]
 
         # Obtener las películas completas
-        peliculas_completas_query = PeliculaCompleta.query.all()
+        cursor.execute("SELECT id, titulo, genero, duracion, imagen FROM Peliculas_Completas")
         peliculas_completas = [
             {
-                "id": row.id,
-                "titulo": row.titulo,
-                "genero": row.genero,
-                "duracion": row.duracion,
-                "imagen": row.imagen,
+                "id": row[0],
+                "titulo": row[1],
+                "genero": row[2],
+                "duracion": row[3],
+                "imagen": row[4],  # Se mantiene la estructura similar a 'Peliculas'
             }
-            for row in peliculas_completas_query
+            for row in cursor.fetchall()
         ]
 
         return render_template(
@@ -334,14 +374,14 @@ def admin():
             logo_url=url_for('obtener_logo')
         )
 
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e), 'message': 'Error en la base de datos'}), 500
-
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
 
 @app.route('/agregar_pelicula', methods=['POST'])
+@with_db_connection
 @login_required
-def agregar_pelicula():
+def agregar_pelicula(conn):
     titulo = request.form['titulo']
     genero = request.form['genero']
     duracion = int(request.form['duracion'])
@@ -350,79 +390,75 @@ def agregar_pelicula():
     imagen_binaria = None
     if 'imagen' in request.files and allowed_file(request.files['imagen'].filename):
         imagen = request.files['imagen']
-        imagen_binaria = imagen.read()  # Leer imagen en binario
+        imagen_binaria = imagen.read()  # Leer el archivo en binario
     
     try:
-        nueva_pelicula = Pelicula(
-            titulo=titulo,
-            genero=genero,
-            duracion=duracion,
-            imagen=imagen_binaria,
-            trailer=trailer
-        )
-
-        db.session.add(nueva_pelicula)
-        db.session.commit()
-
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO Peliculas (titulo, genero, duracion, imagen, trailer)
+            VALUES (?, ?, ?, ?, ?)
+        """, (titulo, genero, duracion, imagen_binaria, trailer))
+        conn.commit()
         flash('Película agregada exitosamente.', 'success')
         return redirect(url_for('admin'))
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e), 'message': 'Error al agregar la película'}), 500
-
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
 
 @app.route('/imagen_pelicula/<int:id>')
-def obtener_imagen_pelicula(id):
+@with_db_connection
+def obtener_imagen_pelicula(conn, id):
     try:
-        pelicula = Pelicula.query.get(id)
-        if pelicula and pelicula.imagen:
-            return send_file(BytesIO(pelicula.imagen), mimetype='image/jpeg')  # Ajusta mimetype si es otro formato
+        cursor = conn.cursor()
+        cursor.execute("SELECT imagen FROM Peliculas WHERE id = ?", (id,))
+        row = cursor.fetchone()
+        if row and row[0]:
+            return send_file(BytesIO(row[0]), mimetype='image/jpeg')  # Ajusta según el formato de imagen
         else:
-            return send_file("static/img/default.jpg", mimetype='image/jpeg')  # Imagen por defecto
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e), 'message': 'Error al obtener imagen'}), 500
+            return send_file("static/img/default.jpg", mimetype='image/jpeg')  # Imagen por defecto si no hay imagen
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
 
 @app.route('/peliculas_existentes')
-def peliculas_existentes():
+@with_db_connection
+def peliculas_existentes(conn):
     try:
-        peliculas_query = Pelicula.query.all()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, titulo, genero, duracion, imagen, trailer FROM Peliculas")
         peliculas = [
             {
-                "id": peli.id,
-                "titulo": peli.titulo,
-                "genero": peli.genero,
-                "duracion": peli.duracion,
-                "imagen": peli.imagen,
-                "trailer": peli.trailer,
+                "id": row[0],
+                "titulo": row[1],
+                "genero": row[2],
+                "duracion": row[3],
+                "imagen": row[4],
+                "trailer": row[5],
             }
-            for peli in peliculas_query
+            for row in cursor.fetchall()
         ]
         return render_template('editar_pelicula.html', peliculas=peliculas)
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e), 'message': 'Error al obtener películas'}), 500
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
 
 @app.route('/editar_pelicula/<int:id>', methods=['GET', 'POST'])
+@with_db_connection
 @login_required
-def editar_pelicula(id):
-    pelicula = Pelicula.query.get(id)
-    if not pelicula:
-        return "Película no encontrada", 404
-
+def editar_pelicula(conn, id):
     if request.method == 'POST':
-        # Eliminar película
+        # Verificar si se presionó el botón de eliminar
         if 'eliminar' in request.form:
             try:
-                db.session.delete(pelicula)
-                db.session.commit()
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM Peliculas WHERE id = ?", (id,))
+                conn.commit()
                 flash('Película eliminada exitosamente.', 'success')
                 return redirect(url_for('admin'))
-            except Exception as e:
-                return jsonify({'success': False, 'error': str(e), 'message': 'Error al eliminar la película'}), 500
+            except pyodbc.Error as e:
+                return handle_db_error(e)
 
-        # Actualizar película
+        # Si no se presionó el botón de eliminar, se actualiza la película
         titulo = request.form['titulo']
         genero = request.form['genero']
         duracion = int(request.form['duracion'])
@@ -431,78 +467,83 @@ def editar_pelicula(id):
 
         if 'imagen' in request.files and request.files['imagen'].filename:
             imagen = request.files['imagen']
-            imagen_binaria = imagen.read()
-
+            imagen_binaria = imagen.read()  # Convertir la imagen a binario
+        
         try:
-            pelicula.titulo = titulo
-            pelicula.genero = genero
-            pelicula.duracion = duracion
-            pelicula.trailer = trailer
+            cursor = conn.cursor()
+            query = "UPDATE Peliculas SET titulo = ?, genero = ?, duracion = ?, trailer = ?"
+            params = [titulo, genero, duracion, trailer]
 
             if imagen_binaria:
-                pelicula.imagen = imagen_binaria
+                query += ", imagen = ?"
+                params.append(imagen_binaria)
 
-            db.session.commit()
+            query += " WHERE id = ?"
+            params.append(id)
+
+            cursor.execute(query, params)
+            conn.commit()
             flash('Película editada exitosamente.', 'success')
             return redirect(url_for('admin'))
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e), 'message': 'Error al editar la película'}), 500
+        except pyodbc.Error as e:
+            return handle_db_error(e)
 
-    # Método GET: enviar datos para editar
-    pelicula_data = {
-        "id": pelicula.id,
-        "titulo": pelicula.titulo,
-        "genero": pelicula.genero,
-        "duracion": pelicula.duracion,
-        "trailer": pelicula.trailer
-    }
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, titulo, genero, duracion, trailer FROM Peliculas WHERE id = ?", (id,))
+        pelicula = cursor.fetchone()
+        if not pelicula:
+            return "Película no encontrada", 404
 
-    # Cargar configuración (si la tienes implementada)
-    configuracion = cargar_configuracion() if 'cargar_configuracion' in globals() else {}
-    logo = configuracion.get('logo', 'logo.png')
+        pelicula_data = {
+            "id": pelicula[0],
+            "titulo": pelicula[1],
+            "genero": pelicula[2],
+            "duracion": pelicula[3],
+            "trailer": pelicula[4]
+        }
+        
+        # Cargar la configuración (incluyendo logo)
+        configuracion = cargar_configuracion()
+        logo = configuracion.get('logo', 'logo.png')
 
-    return render_template('editar_pelicula.html', pelicula=pelicula_data, id=id, logo_url=url_for('obtener_logo'))
-
-
-
-class Configuracion(db.Model):
-    __tablename__ = 'configuracion'
-    clave = db.Column(db.String(100), primary_key=True)
-    valor = db.Column(db.LargeBinary)
-
+        return render_template('editar_pelicula.html', pelicula=pelicula_data, id=id, logo_url=url_for('obtener_logo'))
+    
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
 
 @app.route('/eliminar_pelicula/<int:id>', methods=['POST'])
+@with_db_connection
 @login_required
-def eliminar_pelicula(id):
+def eliminar_pelicula(conn, id):
     try:
-        pelicula = Pelicula.query.get(id)
-        if not pelicula:
-            flash('Película no encontrada.', 'error')
-            return redirect(url_for('admin'))
-
-        db.session.delete(pelicula)
-        db.session.commit()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM Peliculas WHERE id = ?", (id,))
+        conn.commit()
         flash('Película eliminada exitosamente.', 'success')
         return redirect(url_for('admin'))
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e), 'message': 'Error al eliminar película'}), 500
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
 
 def get_logo_from_db():
-    logo = Configuracion.query.filter_by(clave='logo').first()
-    return logo.valor if logo and logo.valor else None
+    """Obtiene el logo desde la base de datos."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT valor FROM Configuracion WHERE clave = 'logo'")
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else None
 
 
 def update_logo_in_db(file_data):
-    logo = Configuracion.query.filter_by(clave='logo').first()
-    if logo:
-        logo.valor = file_data
-    else:
-        logo = Configuracion(clave='logo', valor=file_data)
-        db.session.add(logo)
-    db.session.commit()
+    """Actualiza el logo en la base de datos."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Configuracion SET valor = ? WHERE clave = 'logo'", (file_data,))
+    conn.commit()
+    conn.close()
 
 
 @app.route('/cambiar_logo', methods=['POST'])
@@ -511,24 +552,20 @@ def cambiar_logo():
     if 'logo' not in request.files:
         flash('No se seleccionó ningún archivo', 'error')
         return redirect(url_for('admin'))
-
+    
     file = request.files['logo']
     if file.filename == '':
         flash('No se seleccionó ningún archivo', 'error')
         return redirect(url_for('admin'))
-
+    
     if file and allowed_file(file.filename):
         file_data = file.read()
-        try:
-            update_logo_in_db(file_data)
-            flash('Logo actualizado correctamente', 'success')
-        except Exception as e:
-            flash(f'Error al actualizar el logo: {e}', 'error')
+        update_logo_in_db(file_data)
+        flash('Logo actualizado correctamente', 'success')
     else:
         flash('Tipo de archivo no permitido', 'error')
-
+    
     return redirect(url_for('admin'))
-
 
 @app.route('/logo')
 def obtener_logo():
@@ -536,7 +573,6 @@ def obtener_logo():
     if logo_data:
         return send_file(BytesIO(logo_data), mimetype='image/png')
     return send_file('static/img/default_logo.png', mimetype='image/png')
-
 
 @app.context_processor
 def inject_logo():
@@ -583,6 +619,7 @@ def buscar_peliculas(query, peliculas):
     resultados = [pelicula for pelicula in peliculas if query in pelicula['titulo'].lower() or query in pelicula['genero'].lower()]
     return resultados
 
+# Guardar película completa en la base de datos
 @app.route('/agregar_pelicula_completa', methods=['POST'])
 @login_required
 def agregar_pelicula_completa():
@@ -591,11 +628,13 @@ def agregar_pelicula_completa():
         genero = request.form['genero']
         duracion = int(request.form['duracion'])
 
+        # Leer imagen como binario
         imagen_binaria = None
         if 'imagen' in request.files and allowed_file(request.files['imagen'].filename):
             imagen = request.files['imagen']
             imagen_binaria = imagen.read()
 
+        # Leer video como binario
         pelicula_binaria = None
         if 'pelicula_completa' in request.files and allowed_file(request.files['pelicula_completa'].filename):
             pelicula = request.files['pelicula_completa']
@@ -605,30 +644,34 @@ def agregar_pelicula_completa():
             flash("Error: Debes subir una imagen y un video.", "error")
             return redirect(url_for('admin'))
 
-        nueva_pelicula_completa = PeliculaCompleta(
-            titulo=titulo,
-            genero=genero,
-            duracion=duracion,
-            imagen=imagen_binaria,
-            pelicula_completa=pelicula_binaria
-        )
-
-        db.session.add(nueva_pelicula_completa)
-        db.session.commit()
+        # Insertar en la base de datos
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO Peliculas_Completas (titulo, genero, duracion, imagen, pelicula_completa)
+            VALUES (?, ?, ?, ?, ?)
+        """, (titulo, genero, duracion, imagen_binaria, pelicula_binaria))
+        conn.commit()
+        conn.close()
 
         flash('Película completa agregada exitosamente', 'success')
         return redirect(url_for('admin'))
+    except pyodbc.Error as e:
+        return jsonify({'error': str(e)})
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-
+# Obtener imagen de película completa (funciona con Python 3.13+)
 @app.route('/imagen_pelicula_completa/<int:id>')
 def obtener_imagen_pelicula_completa(id):
     try:
-        pelicula = PeliculaCompleta.query.get(id)
-        if pelicula and pelicula.imagen:
-            image_data = pelicula.imagen
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT imagen FROM Peliculas_Completas WHERE id = ?", (id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if row and row[0]:
+            image_data = row[0]
             kind = filetype.guess(image_data)
             mime_type = kind.mime if kind else 'image/jpeg'
             return send_file(BytesIO(image_data), mimetype=mime_type)
@@ -639,19 +682,27 @@ def obtener_imagen_pelicula_completa(id):
         print(f"[ERROR] Imagen no cargada: {e}")
         return send_file('static/img/default.jpg', mimetype='image/jpeg')
 
+# Obtener video de película completa
 @app.route('/video_pelicula_completa/<int:id>')
 def obtener_video_pelicula_completa(id):
     try:
-        pelicula = PeliculaCompleta.query.get(id)
-        if not pelicula or not pelicula.pelicula_completa:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT pelicula_completa FROM Peliculas_Completas WHERE id = ?", (id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row or not row[0]:
             return "Video no encontrado", 404
 
-        video_data = pelicula.pelicula_completa
-        video_size = len(video_data)
+        video_data = row[0]
         video_stream = io.BytesIO(video_data)
+        video_size = len(video_data)
 
+        # Soporte para Range (adelantar video)
         range_header = request.headers.get('Range', None)
         if range_header:
+            # Ejemplo de header: "Range: bytes=12345-"
             byte_range = range_header.replace('bytes=', '').split('-')
             start = int(byte_range[0])
             end = int(byte_range[1]) if byte_range[1] else video_size - 1
@@ -666,7 +717,7 @@ def obtener_video_pelicula_completa(id):
             rv.headers.add('Content-Length', str(length))
             return rv
 
-        # Si no hay header Range, enviar todo el video
+        # Si no se pide rango, se devuelve todo el video
         return Response(video_stream.read(), mimetype='video/mp4')
 
     except Exception as e:
@@ -676,45 +727,63 @@ def obtener_video_pelicula_completa(id):
 
 @app.route('/peliculas_completas')
 @login_required
-def peliculas_completas():
+@with_db_connection
+def peliculas_completas(conn):
     try:
-        peliculas_query = PeliculaCompleta.query.all()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, titulo, genero, duracion, imagen, pelicula_completa FROM Peliculas_Completas")
         peliculas = [
             {
-                "id": peli.id,
-                "titulo": peli.titulo,
-                "genero": peli.genero,
-                "duracion": peli.duracion,
-                "imagen": f"data:image/jpeg;base64,{(peli.imagen.encode('base64').decode() if peli.imagen else '')}",
-                "pelicula_completa": f"data:video/mp4;base64,{(peli.pelicula_completa.encode('base64').decode() if peli.pelicula_completa else '')}"
+                "id": row[0],
+                "titulo": row[1],
+                "genero": row[2],
+                "duracion": row[3],
+                "imagen": f"data:image/jpeg;base64,{row[4]}",
+                "pelicula_completa": f"data:video/mp4;base64,{row[5]}"
             }
-            for peli in peliculas_query
+            for row in cursor.fetchall()
         ]
         return render_template('peliculas_completas.html', peliculas=peliculas, logo_url=url_for('obtener_logo'))
+    except pyodbc.Error as e:
+        return handle_db_error(e)
 
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e), 'message': 'Error al cargar películas completas'}), 500
 
 
 @app.route('/ver_pelicula/<int:pelicula_id>')
 def ver_pelicula(pelicula_id):
     try:
-        pelicula = PeliculaCompleta.query.get(pelicula_id)
-        if not pelicula:
+        # Connect to database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get video path from database
+        cursor.execute("SELECT pelicula_completa FROM Peliculas_Completas WHERE id = ?", (pelicula_id,))
+        resultado = cursor.fetchone()
+        
+        if not resultado:
             return "Película no encontrada", 404
-
-        video_data = pelicula.pelicula_completa
-
-        if video_data:
-            response = make_response(video_data)
+        
+        video_path = resultado[0]
+        
+        # Check if the result is already a file path or if it's binary data
+        if isinstance(video_path, bytes):
+            # If it's binary data stored in the database, create a response
+            response = make_response(video_path)
             response.headers.set('Content-Type', 'video/mp4')
             return response
         else:
-            return "Archivo de video no encontrado", 404
-
+            # If it's a file path, serve the file
+            if os.path.isfile(video_path):
+                return send_file(video_path, mimetype='video/mp4')
+            else:
+                return "Archivo de video no encontrado", 404
+    
     except Exception as e:
         print(f"Error al reproducir video: {e}")
         return "Error al reproducir video", 500
+    
+    finally:
+        conn.close()
 
 @app.route('/editar_pelicula_completa/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -724,172 +793,357 @@ def editar_pelicula_completa(id):
         flash('No tienes permisos para editar películas', 'error')
         return redirect(url_for('index'))
 
-    pelicula = PeliculaCompleta.query.get(id)
-    if not pelicula:
+    # Conexión a la base de datos
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Buscar la película por su ID
+    cursor.execute("SELECT * FROM Peliculas_Completas WHERE id = ?", (id,))
+    pelicula = cursor.fetchone()
+
+    if pelicula is None:
+        conn.close()
         flash('Película no encontrada', 'error')
         return redirect(url_for('admin'))
 
     if request.method == 'POST':
+        # Si se presiona el botón "Eliminar"
         if 'eliminar' in request.form:
-            try:
-                db.session.delete(pelicula)
-                db.session.commit()
-                flash('Película eliminada con éxito', 'success')
-            except Exception as e:
-                flash(f'Error al eliminar la película: {e}', 'error')
+            cursor.execute("DELETE FROM Peliculas_Completas WHERE id = ?", (id,))
+            conn.commit()
+            conn.close()
+            
+            flash('Película eliminada con éxito', 'success')
             return redirect(url_for('admin'))
 
-        # Actualizar datos
-        pelicula.titulo = request.form['titulo']
-        pelicula.genero = request.form['genero']
-        pelicula.duracion = int(request.form['duracion'])
+        # Preparar los datos para actualizar
+        titulo = request.form['titulo']
+        genero = request.form['genero']
+        duracion = int(request.form['duracion'])
 
         # Manejo de imagen
+        imagen = None
         if 'imagen' in request.files:
             file_imagen = request.files['imagen']
             if file_imagen.filename != '':
-                pelicula.imagen = file_imagen.read()
+                imagen = file_imagen.read()
 
         # Manejo de video
+        pelicula_completa = None
         if 'video' in request.files:
             file_video = request.files['video']
             if file_video.filename != '':
-                pelicula.pelicula_completa = file_video.read()
+                pelicula_completa = file_video.read()
 
-        try:
-            db.session.commit()
-            flash('Película completa editada con éxito', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Error al editar la película: {e}', 'error')
+        # Preparar la consulta de actualización
+        if imagen and pelicula_completa:
+            cursor.execute("""
+                UPDATE Peliculas_Completas 
+                SET titulo = ?, genero = ?, duracion = ?, 
+                    imagen = ?, pelicula_completa = ? 
+                WHERE id = ?
+            """, (titulo, genero, duracion, imagen, pelicula_completa, id))
+        elif imagen:
+            cursor.execute("""
+                UPDATE Peliculas_Completas 
+                SET titulo = ?, genero = ?, duracion = ?, imagen = ? 
+                WHERE id = ?
+            """, (titulo, genero, duracion, imagen, id))
+        elif pelicula_completa:
+            cursor.execute("""
+                UPDATE Peliculas_Completas 
+                SET titulo = ?, genero = ?, duracion = ?, pelicula_completa = ? 
+                WHERE id = ?
+            """, (titulo, genero, duracion, pelicula_completa, id))
+        else:
+            cursor.execute("""
+                UPDATE Peliculas_Completas 
+                SET titulo = ?, genero = ?, duracion = ? 
+                WHERE id = ?
+            """, (titulo, genero, duracion, id))
 
+        # Confirmar cambios
+        conn.commit()
+        conn.close()
+
+        flash('Película completa editada con éxito', 'success')
         return redirect(url_for('admin'))
 
-    # GET: renderizar plantilla con datos
-    return render_template(
-        'editar_pelicula_completa.html',
-        pelicula=pelicula,
-        id=id,
-        logo_url=url_for('obtener_logo')
-    )
+    # Cerrar conexión si es un método GET
+    conn.close()
+
+    return render_template('editar_pelicula_completa.html', 
+                           pelicula=pelicula, 
+                           id=id, 
+                           logo_url=url_for('obtener_logo'))
 
 
 
-
+# Ruta de chat
 @app.route('/chat')
 @login_required
 def chat():
     return render_template('chat.html', email=current_user.email)
 
+# Obtener administradores
+@app.route('/api/administradores', methods=['GET'])
+@login_required
+def obtener_administradores():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT email FROM Usuarios
+        WHERE is_admin = 1
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    
+    admins = [{'email': row[0]} for row in rows]
+    return jsonify(admins)
 
+# Obtener chats (contactos)
+@app.route('/api/chats', methods=['GET'])
+@login_required
+def obtener_chats():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if current_user.is_admin:
+        # Si es admin, obtener todos los usuarios que han enviado mensajes
+        cursor.execute("""
+            SELECT DISTINCT
+                CASE
+                    WHEN sender_email = ? THEN receiver_email
+                    ELSE sender_email
+                END as contact_email,
+                (SELECT is_admin FROM Usuarios WHERE email = contact_email) as is_admin,
+                (SELECT MAX(timestamp) FROM Mensajes 
+                 WHERE (sender_email = ? AND receiver_email = contact_email) 
+                    OR (sender_email = contact_email AND receiver_email = ?)) as last_time,
+                (SELECT TOP 1 contenido FROM Mensajes 
+                WHERE ((sender_email = ? AND receiver_email = contact_email) 
+                    OR (sender_email = contact_email AND receiver_email = ?))
+                ORDER BY timestamp DESC) as last_message
+
+            FROM Mensajes
+            WHERE sender_email = ? OR receiver_email = ?
+            GROUP BY contact_email
+            ORDER BY last_time DESC 
+        """, (current_user.email, current_user.email, current_user.email, current_user.email, current_user.email, current_user.email, current_user.email))
+    else:
+        # Si es usuario normal, obtener solo los administradores que le han enviado mensajes
+        cursor.execute("""
+            SELECT DISTINCT
+                CASE
+                    WHEN sender_email = ? THEN receiver_email
+                    ELSE sender_email
+                END as contact_email,
+                (SELECT is_admin FROM Usuarios WHERE email = contact_email) as is_admin,
+                (SELECT MAX(timestamp) FROM Mensajes 
+                 WHERE (sender_email = ? AND receiver_email = contact_email) 
+                    OR (sender_email = contact_email AND receiver_email = ?)) as last_time,
+                (SELECT TOP 1 contenido FROM Mensajes 
+                WHERE ((sender_email = ? AND receiver_email = contact_email) 
+                    OR (sender_email = contact_email AND receiver_email = ?))
+                ORDER BY timestamp DESC)
+
+            FROM Mensajes
+            WHERE (sender_email = ? OR receiver_email = ?)
+            AND ((SELECT is_admin FROM Usuarios WHERE email = contact_email) = 1 OR sender_email = ?)
+            GROUP BY contact_email
+            ORDER BY last_time DESC
+        """, (current_user.email, current_user.email, current_user.email, current_user.email, current_user.email, current_user.email, current_user.email, current_user.email))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    chats = []
+    for row in rows:
+        if row[0] != current_user.email:  # Evitar mostrar chats con uno mismo
+            formatted_time = ""
+            if row[2]:
+                timestamp = datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S')
+                today = datetime.now()
+                if timestamp.date() == today.date():
+                    formatted_time = timestamp.strftime('%H:%M')
+                elif (today.date() - timestamp.date()).days == 1:
+                    formatted_time = "Ayer"
+                else:
+                    formatted_time = timestamp.strftime('%d/%m/%Y')
+            
+            chats.append({
+                'email': row[0],
+                'isAdmin': bool(row[1]),
+                'time': formatted_time,
+                'lastMessage': row[3] if row[3] else ''
+            })
+    
+    return jsonify(chats)
+
+# Obtener mensajes
 @app.route('/api/mensajes', methods=['GET'])
 @login_required
 def obtener_mensajes():
     receiver = request.args.get('receiver', '')
-
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
     if receiver:
-        # Filtrar mensajes entre current_user y receiver con condiciones de visibilidad
-        mensajes_query = Mensaje.query.filter(
-            ((Mensaje.sender_email == current_user.email) & (Mensaje.receiver_email == receiver) & (Mensaje.visible_para_sender == True)) |
-            ((Mensaje.sender_email == receiver) & (Mensaje.receiver_email == current_user.email) & (Mensaje.visible_para_receiver == True))
-        ).order_by(Mensaje.timestamp.asc()).all()
+        # Si hay un destinatario específico, mostrar solo esa conversación
+        cursor.execute("""
+            SELECT id, sender_email, receiver_email, contenido, timestamp
+            FROM Mensajes
+            WHERE
+                ((sender_email = ? AND receiver_email = ? AND visible_para_sender = 1)
+                OR (sender_email = ? AND receiver_email = ? AND visible_para_receiver = 1))
+            ORDER BY timestamp ASC
+        """, (current_user.email, receiver, receiver, current_user.email))
     else:
-        # Todos los mensajes visibles para current_user
-        mensajes_query = Mensaje.query.filter(
-            ((Mensaje.sender_email == current_user.email) & (Mensaje.visible_para_sender == True)) |
-            ((Mensaje.receiver_email == current_user.email) & (Mensaje.visible_para_receiver == True))
-        ).order_by(Mensaje.timestamp.asc()).all()
-
+        # Si no hay destinatario, mostrar todos los mensajes del usuario
+        cursor.execute("""
+            SELECT id, sender_email, receiver_email, contenido, timestamp
+            FROM Mensajes
+            WHERE
+                (sender_email = ? AND visible_para_sender = 1)
+                OR (receiver_email = ? AND visible_para_receiver = 1)
+            ORDER BY timestamp ASC
+        """, (current_user.email, current_user.email))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
     mensajes = []
-    for m in mensajes_query:
+    for row in rows:
+        # row[4] ya es datetime
+        formatted_time = row[4].strftime('%H:%M')
+        
         mensajes.append({
-            'id': m.id,
-            'sender': m.sender_email,
-            'receiver': m.receiver_email,
-            'contenido': m.contenido,
-            'timestamp': m.timestamp.strftime('%H:%M') if m.timestamp else ''
+            'id': row[0],
+            'sender': row[1],
+            'receiver': row[2],
+            'contenido': row[3],
+            'timestamp': formatted_time
         })
-
+    
     return jsonify(mensajes)
 
+
+# Enviar mensaje
 @app.route('/api/mensajes', methods=['POST'])
 @login_required
 def enviar_mensaje():
     data = request.json
     contenido = data.get('contenido')
-    receiver_email = data.get('receiver')
-
+    receiver = data.get('receiver')
+    
     if not contenido:
         return jsonify({'error': 'Mensaje vacío'}), 400
-
-    if receiver_email:
-        usuario_destino = Usuario.query.filter_by(email=receiver_email).first()
-        if not usuario_destino:
+    
+    # Verificar si el destinatario existe
+    if receiver:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT email FROM Usuarios WHERE email = ?", (receiver,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
             return jsonify({'error': 'Destinatario no encontrado'}), 404
-
-        mensaje = Mensaje(
-            sender_email=current_user.email,
-            receiver_email=receiver_email,
-            contenido=contenido,
-            timestamp=datetime.utcnow(),
-            visible_para_sender=True,
-            visible_para_receiver=True
-        )
-        db.session.add(mensaje)
-        db.session.commit()
-
+        
+        # Insertar el mensaje
+        cursor.execute("""
+            INSERT INTO Mensajes (sender_email, receiver_email, contenido, timestamp, visible_para_sender, visible_para_receiver)
+            VALUES (?, ?, ?, GETDATE(), 1, 1)
+        """, (current_user.email, receiver, contenido))
+        
+        conn.commit()
+        conn.close()
+        
         return jsonify({'success': True})
-
     else:
-        # Si no hay destinatario específico, enviar a todos administradores
+        # Si no hay destinatario específico, enviar mensaje a todos los administradores
         if not current_user.is_admin:
-            admins = Usuario.query.filter_by(is_admin=True).all()
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Obtener todos los administradores
+            cursor.execute("SELECT email FROM Usuarios WHERE is_admin = 1")
+            admins = cursor.fetchall()
+            
             for admin in admins:
-                mensaje = Mensaje(
-                    sender_email=current_user.email,
-                    receiver_email=admin.email,
-                    contenido=contenido,
-                    timestamp=datetime.utcnow(),
-                    visible_para_sender=True,
-                    visible_para_receiver=True
-                )
-                db.session.add(mensaje)
-            db.session.commit()
+                cursor.execute("""
+                    INSERT INTO Mensajes (sender_email, receiver_email, contenido, timestamp, visible_para_sender, visible_para_receiver)
+                    VALUES (?, ?, ?, GETDATE(), 1, 1)
+                """, (current_user.email, admin[0], contenido))
+            
+            conn.commit()
+            conn.close()
+            
             return jsonify({'success': True})
         else:
             return jsonify({'error': 'Debe especificar un destinatario'}), 400
 
-
+# Eliminar solo para mi
 @app.route('/api/mensajes/<int:id>/eliminar_para_mi', methods=['POST'])
 @login_required
 def eliminar_para_mi(id):
-    mensaje = Mensaje.query.get(id)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verificar primero si el mensaje existe y pertenece al usuario
+    cursor.execute("""
+        SELECT sender_email, receiver_email FROM Mensajes WHERE id = ?
+    """, (id,))
+    
+    mensaje = cursor.fetchone()
     if not mensaje:
+        conn.close()
         return jsonify({'error': 'Mensaje no encontrado'}), 404
-
-    if mensaje.sender_email == current_user.email:
-        mensaje.visible_para_sender = False
-    elif mensaje.receiver_email == current_user.email:
-        mensaje.visible_para_receiver = False
+    
+    # Actualizar la visibilidad según si es remitente o destinatario
+    if mensaje[0] == current_user.email:  # Es el remitente
+        cursor.execute("""
+            UPDATE Mensajes SET visible_para_sender = 0 WHERE id = ?
+        """, (id,))
+    elif mensaje[1] == current_user.email:  # Es el destinatario
+        cursor.execute("""
+            UPDATE Mensajes SET visible_para_receiver = 0 WHERE id = ?
+        """, (id,))
     else:
+        conn.close()
         return jsonify({'error': 'No tienes permiso para esta operación'}), 403
-
-    db.session.commit()
+    
+    conn.commit()
+    conn.close()
+    
     return jsonify({'success': True})
 
-
+# Eliminar para todos (solo si es el remitente o admin)
 @app.route('/api/mensajes/<int:id>/eliminar_para_todos', methods=['POST'])
 @login_required
 def eliminar_para_todos(id):
-    mensaje = Mensaje.query.get(id)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verificar primero si el mensaje existe
+    cursor.execute("""
+        SELECT sender_email FROM Mensajes WHERE id = ?
+    """, (id,))
+    
+    mensaje = cursor.fetchone()
     if not mensaje:
+        conn.close()
         return jsonify({'error': 'Mensaje no encontrado'}), 404
-
-    if mensaje.sender_email == current_user.email or current_user.is_admin:
-        db.session.delete(mensaje)
-        db.session.commit()
+    
+    # Solo el remitente o un administrador puede eliminar para todos
+    if mensaje[0] == current_user.email or current_user.is_admin:
+        cursor.execute("DELETE FROM Mensajes WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
         return jsonify({'success': True})
     else:
+        conn.close()
         return jsonify({'error': 'No tienes permiso para esta operación'}), 403
 
 
