@@ -44,18 +44,18 @@ logging.info("Servidor Flask iniciado correctamente.")
 def get_db_connection():
     try:
         connection = pyodbc.connect(
-            'DRIVER={ODBC Driver 18 for SQL Server};'
-            'SERVER=DESKTOP-PTO39EK\\PCGAMER_5,1433;'
+            'DRIVER={ODBC Driver 17 for SQL Server};'
+            'SERVER=10.104.1.110,1433;'
             'DATABASE=CineDB;'
             'UID=Jhon;'
             'PWD=RTJh0n_2026;'
-            'TrustServerCertificate=yes;'
             'Encrypt=no;'
+            'TrustServerCertificate=yes;'
         )
-        logging.info("Conexión exitosa a la base de datos.")
+        logging.info("✅ Conexión exitosa a la base de datos.")
         return connection
     except pyodbc.Error as e:
-        logging.error(f"Error en la conexión: {e}")
+        logging.error(f"❌ Error en la conexión a la base de datos: {e}")
         raise
 
 def handle_db_error(error):
