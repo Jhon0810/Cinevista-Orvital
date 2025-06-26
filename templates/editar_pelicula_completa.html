@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Película Completa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <img src="{{ logo_url }}" alt="Intercine Logo" class="logo">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Inicio</a></li>
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('cartelera') }}">Cartelera</a></li>
+                    {% if current_user.is_admin %}
+                        <li><a href="{{ url_for('admin') }}">Admin</a></li>
+                    {% endif %}
+                    <li><a href="{{ url_for('chat') }}">Chat</a></li>  <!-- Aquí está el nuevo botón -->
+                    <li><a href="{{ url_for('logout') }}">Cerrar Sesión</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Iniciar Sesión</a></li>
+                    <li><a href="{{ url_for('register') }}">Registrarse</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        <h1>Editar Película Completa</h1>
+    </header>
+    <main>
+        <div class="container">
+            <form action="{{ url_for('editar_pelicula_completa', id=pelicula.id) }}" method="POST" enctype="multipart/form-data">
+                <!-- Grupo de campo para el título -->
+                <div class="form-group">
+                    <label for="titulo">Título:</label>
+                    <input type="text" id="titulo" name="titulo" value="{{ pelicula.titulo }}" required>
+                </div>
+                
+                <!-- Grupo de campo para el género -->
+                <div class="form-group">
+                    <label for="genero">Género:</label>
+                    <input type="text" id="genero" name="genero" value="{{ pelicula.genero }}" required>
+                </div>
+                
+                <!-- Grupo de campo para la duración -->
+                <div class="form-group">
+                    <label for="duracion">Duración (minutos):</label>
+                    <input type="number" id="duracion" name="duracion" value="{{ pelicula.duracion }}" required>
+                </div>
+                
+                <!-- Grupo de campo para cambiar imagen -->
+                <div class="form-group">
+                    <label for="imagen">Cambiar imagen:</label>
+                    <input type="file" id="imagen" name="imagen" accept="image/*">
+                    <small class="form-text text-muted">Deja este campo vacío si no deseas cambiar la imagen.</small>
+                </div>
+                
+                <!-- Grupo de campo para subir el video -->
+                <div class="form-group">
+                    <label for="video">Cambiar video de la película:</label>
+                    <input type="file" id="video" name="video" accept="video/*">
+                    <small class="form-text text-muted">Sube el archivo del video de la película (mp4, avi, etc.).</small>
+                </div>
+                
+                <!-- Botones de acción -->
+                <div class="form-actions">
+                    <button type="submit">Guardar Cambios</button>
+                    <button type="submit" name="eliminar" value="1" onclick="return confirm('¿Está seguro de que desea eliminar esta película?');">Eliminar Película</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <footer>
+        © 2025 Cinevista Orvital. Todos los derechos reservados.
+    </footer>
+</body>
+</html>

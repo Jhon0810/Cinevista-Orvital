@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartelera - Cinevista Orvital</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <style>
+        .video-thumbnail-wrapper, .video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            background-color: #000;
+        }
+
+        .video-thumbnail, .video-container iframe, .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .pelicula-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* Relación 16:9 */
+            background-color: #000;
+            margin: 10px 0;
+        }
+
+        .trailer-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* Relación 16:9 - tamaño original */
+            background-color: #000;
+            margin: 10px 0 -50px 0; /* Margen negativo para extenderse hacia abajo y cubrir el texto */
+            z-index: 2; /* Para que esté por encima del texto */
+        }
+
+        .card.reproduciendo .trailer-container {
+            margin: 10px 0; /* Margen normal cuando se reproduce el trailer */
+        }
+
+        .pelicula-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .video-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .play-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .card h3 {
+            min-height: 2.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .switch-buttons {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .switch-buttons button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            background-color: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .switch-buttons button:hover {
+            background-color: #cc0000;
+            color: white;
+            border: 2px solid #ffd700;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            border-radius: 5px;
+            transition: border-color 0.3s ease, background-color 0.3s ease;
+            cursor: pointer;
+        }
+
+        .seccion {
+            display: none;
+        }
+
+        .seccion.activa {
+            display: block;
+        }
+    </style>
+
+</head>
+<body>
+    <header>
+        <nav>
+            <img src="{{ logo_url }}" alt="Intercine Logo" class="logo">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Inicio</a></li>
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('cartelera') }}">Cartelera</a></li>
+                    {% if current_user.is_admin %}
+                        <li><a href="{{ url_for('admin') }}">Admin</a></li>
+                    {% endif %}
+                    <li><a href="{{ url_for('chat') }}">Chat</a></li>  <!-- Aquí está el nuevo botón -->
+                    <li><a href="{{ url_for('logout') }}">Cerrar Sesión</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Iniciar Sesión</a></li>
+                    <li><a href="{{ url_for('register') }}">Registrarse</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        <h1>Cartelera</h1>
+    </header>
+<main>
+    <div class="main-container">
+        <div class="switch-buttons">
+            <button onclick="mostrarSeccion('trailers')">Trailers</button>
+            <button onclick="mostrarSeccion('peliculas')">Películas Completas</button>
+        </div>
+
+        <!-- Sección de Trailers -->
+        <div id="trailers" class="seccion activa">
+            <div class="search-container">
+                <form id="search-form-trailers">
+                    <input type="text" id="search-input-trailers" name="q" placeholder="Buscar por título o género">
+                    <button type="submit">Buscar</button>
+                </form>
+            </div>
+
+            <div class="cartelera-container" id="trailers-container">
+                {% if peliculas %}
+                    {% for pelicula in peliculas %}
+                        {% if pelicula.trailer %}
+                        <div class="card">
+                            <img src="{{ url_for('obtener_imagen_pelicula', id=pelicula.id) }}" alt="{{ pelicula.titulo }}" style="max-width: 100%;" loading="lazy">
+                            <h3>{{ pelicula.titulo }}</h3>
+                            <div class="trailer-container">
+                                <div class="video-thumbnail-wrapper" onclick="mostrarTrailer('{{ pelicula.trailer }}', this)">
+                                    <img src="https://img.youtube.com/vi/{{ pelicula.trailer.split('embed/')[1] }}/hqdefault.jpg" alt="Video Thumbnail" class="video-thumbnail" loading="lazy">
+                                    <div class="play-button">▶ Ver Trailer</div>
+                                </div>
+                            </div>
+                            <p>{{ pelicula.duracion }} min - {{ pelicula.genero }}</p>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <p style="text-align: center; font-size: 18px; color: #777;">No hay Trailers disponibles.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sección de Películas completas -->
+        <div id="peliculas" class="seccion">
+            <div class="search-container">
+                <form id="search-form-peliculas">
+                    <input type="text" id="search-input-peliculas" name="q" placeholder="Buscar por título o género">
+                    <button type="submit">Buscar</button>
+                </form>
+            </div>
+
+            <div class="cartelera-container" id="peliculas-container">
+                {% if peliculas_completas %}
+                    {% for pelicula in peliculas_completas %}
+                    <div class="card">
+                        <img src="{{ pelicula.imagen }}" alt="{{ pelicula.titulo }}" style="max-width: 100%;" loading="lazy">
+                        <h3>{{ pelicula.titulo }}</h3>
+                        <div class="pelicula-container">
+                            <div class="play-button" onclick="cargarVideo(this)" data-video-url="{{ pelicula.pelicula_completa }}">▶ Ver Película</div>
+                            <div class="video-placeholder"></div>
+                        </div>
+                        <p>{{ pelicula.duracion }} min - {{ pelicula.genero }}</p>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="text-align: center; font-size: 18px; color: #777;">No hay películas completas disponibles.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        
+</main>
+
+    <footer>
+        © 2025 Cinevista Orvital. Todos los derechos reservados.
+    </footer>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchFormTrailers = document.getElementById('search-form-trailers');
+        const searchInputTrailers = document.getElementById('search-input-trailers');
+        const trailersContainer = document.getElementById('trailers-container');
+        const trailersOriginales = trailersContainer.innerHTML;
+
+        const searchFormPeliculas = document.getElementById('search-form-peliculas');
+        const searchInputPeliculas = document.getElementById('search-input-peliculas');
+        const peliculasContainer = document.getElementById('peliculas-container');
+        const peliculasOriginales = peliculasContainer.innerHTML;
+
+        function realizarBusqueda(query, container, originales, esTrailer) {
+            if (query === '') {
+                container.innerHTML = originales;
+            } else {
+                fetch(`/buscar?q=${encodeURIComponent(query)}&es_trailer=${esTrailer}`)
+                    .then(response => response.json())
+                    .then(peliculas => {
+                        container.innerHTML = '';
+                        peliculas.forEach(pelicula => {
+                            let peliculaCard;
+                            if (esTrailer) {
+                                // Manejo de trailers
+                                const trailerId = pelicula.trailer.includes('embed/') 
+                                    ? pelicula.trailer.split('embed/')[1] 
+                                    : pelicula.trailer;
+                                
+                                peliculaCard = `
+                                    <div class="card">
+                                        <img src="${pelicula.imagen}" alt="${pelicula.titulo}">
+                                        <h3>${pelicula.titulo}</h3>
+                                        <div class="trailer-container">
+                                            <div class="video-thumbnail-wrapper">
+                                                <img src="https://img.youtube.com/vi/${trailerId}/hqdefault.jpg" alt="Video Thumbnail" class="video-thumbnail">
+                                                <div class="play-button">▶ Ver Trailer</div>
+                                            </div>
+                                        </div>
+                                        <p>${pelicula.duracion} min - ${pelicula.genero}</p>
+                                    </div>
+                                `;
+                            } else {
+                                // Manejo de películas completas
+                                peliculaCard = `
+                                    <div class="card">
+                                        <img src="${pelicula.imagen}" alt="${pelicula.titulo}">
+                                        <h3>${pelicula.titulo}</h3>
+                                        <div class="pelicula-container">
+                                            <div class="play-button" data-video-url="${pelicula.pelicula_completa}" onclick="cargarVideo(this)">▶ Ver Película</div>
+                                            <div class="video-placeholder"></div>
+                                        </div>
+                                        <p>${pelicula.duracion} min - ${pelicula.genero}</p>
+                                    </div>
+                                `;
+                            }
+                            container.innerHTML += peliculaCard;
+                        });
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+        }
+
+        // Eventos para trailers
+        searchFormTrailers.addEventListener('submit', function(e) {
+            e.preventDefault();
+            realizarBusqueda(searchInputTrailers.value.trim(), trailersContainer, trailersOriginales, true);
+        });
+
+        searchInputTrailers.addEventListener('input', function() {
+            realizarBusqueda(this.value.trim(), trailersContainer, trailersOriginales, true);
+        });
+
+        // Eventos para películas completas
+        searchFormPeliculas.addEventListener('submit', function(e) {
+            e.preventDefault();
+            realizarBusqueda(searchInputPeliculas.value.trim(), peliculasContainer, peliculasOriginales, false);
+        });
+
+        searchInputPeliculas.addEventListener('input', function() {
+            realizarBusqueda(this.value.trim(), peliculasContainer, peliculasOriginales, false);
+        });
+
+        // Evento para reproducir trailers
+        document.addEventListener('click', function(e) {
+            if (e.target && (e.target.classList.contains('video-thumbnail') || e.target.classList.contains('play-button'))) {
+                const wrapper = e.target.closest('.video-thumbnail-wrapper');
+                const card = e.target.closest('.card');
+                const trailerId = wrapper.querySelector('.video-thumbnail').src.split('/vi/')[1].split('/')[0];
+
+                const iframe = document.createElement('iframe');
+                iframe.src = `https://www.youtube.com/embed/${trailerId}?autoplay=1`;
+                iframe.setAttribute('frameborder', '0');
+                iframe.setAttribute('allowfullscreen', '');
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                iframe.classList.add('video-iframe');
+
+                const container = document.createElement('div');
+                container.className = 'video-container';
+                container.appendChild(iframe);
+
+                card.classList.add('reproduciendo'); // Oculta h3 y p
+                wrapper.parentNode.replaceChild(container, wrapper);
+            }
+        });
+    });
+
+    function cargarVideo(element) {
+        const videoUrl = element.getAttribute('data-video-url');
+        const container = element.parentElement;
+        const botonReproducir = element;
+        const placeholder = container.querySelector('.video-placeholder');
+
+        if (!placeholder.querySelector('video')) {
+            const videoElement = document.createElement('video');
+            videoElement.setAttribute('controls', 'controls');
+            videoElement.setAttribute('autoplay', 'autoplay');
+            videoElement.setAttribute('preload', 'auto'); // Carga el video completamente
+            videoElement.setAttribute('playsinline', ''); // Importante para móviles
+            videoElement.style.width = '100%';
+            videoElement.style.height = '100%';
+
+
+            const sourceElement = document.createElement('source');
+            sourceElement.setAttribute('src', videoUrl);
+            sourceElement.setAttribute('type', 'video/mp4');
+
+            videoElement.appendChild(sourceElement);
+            placeholder.appendChild(videoElement);
+            
+            botonReproducir.style.display = 'none';
+
+            videoElement.addEventListener('pause', () => {
+                botonReproducir.style.display = 'block';
+            });
+
+            videoElement.addEventListener('ended', () => {
+                botonReproducir.style.display = 'block';
+            });
+
+            videoElement.addEventListener('playing', () => {
+                botonReproducir.style.display = 'none';
+            });
+
+            document.querySelectorAll('.video-placeholder video').forEach(video => {
+                if (video !== videoElement) {
+                    video.pause();
+                    video.parentNode.removeChild(video);
+                    video.parentNode.parentNode.querySelector('.play-button').style.display = 'block';
+                }
+            });
+        } else {
+            const videoElement = placeholder.querySelector('video');
+            if (videoElement.paused) {
+                videoElement.play();
+                botonReproducir.style.display = 'none';
+            } else {
+                videoElement.pause();
+            }
+        }
+    }
+
+
+
+    
+
+
+        // Función para cambiar entre secciones
+        window.mostrarSeccion = function(seccion) {
+                document.querySelectorAll('.seccion').forEach(s => s.classList.remove('activa'));
+                document.getElementById(seccion).classList.add('activa');
+            }
+</script>
+</body>
+</html>

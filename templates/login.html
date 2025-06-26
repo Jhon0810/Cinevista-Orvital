@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión - Cinevista Orvital</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <img src="{{ logo_url }}" alt="Intercine Logo" class="logo">
+        </nav>
+    </header>
+    <main>
+        <h1>Iniciar Sesión</h1>
+        <form action="{{ url_for('login') }}" method="post">
+            <input type="email" name="email" placeholder="Correo electrónico" required>
+            <input type="password" name="password" placeholder="Contraseña" required>
+            <div id="admin-code-container" style="display: none;">
+                <input type="text" name="admin_code" placeholder="Código de administrador">
+            </div>
+            <button type="submit">Iniciar Sesión</button>
+        </form>
+        <p>¿No tienes una cuenta? <a href="{{ url_for('register') }}">Regístrate aquí</a></p>
+    </main>
+    <footer>
+        © 2025 Cinevista Orvital. Todos los derechos reservados.
+    </footer>
+    <script>
+        document.querySelector('input[name="email"]').addEventListener('input', function() {
+            var adminCodeContainer = document.getElementById('admin-code-container');
+            if (this.value.endsWith('@admin.com')) {
+                adminCodeContainer.style.display = 'block';
+            } else {
+                adminCodeContainer.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

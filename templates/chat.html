@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - Cinevista Orvital</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #111b21;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            color: #e9edef;
+        }
+       
+        header {
+            background-color: #202c33;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #374045;
+        }
+       
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+       
+        .logo {
+            height: 40px;
+            border-radius: 50%;
+        }
+       
+        .header-title {
+            font-weight: 500;
+        }
+       
+        .header-icons {
+            display: flex;
+            gap: 20px;
+            color: #aebac1;
+            font-size: 18px;
+        }
+       
+        nav ul {
+            list-style: none;
+            display: flex;
+            margin: 0;
+            padding: 0;
+        }
+       
+        nav li {
+            margin-left: 15px;
+        }
+       
+        nav a {
+            color: #aebac1;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+       
+        nav a:hover {
+            background-color: #374045;
+        }
+       
+        main {
+            display: flex;
+            height: calc(100vh - 130px);
+        }
+       
+        .sidebar {
+            width: 30%;
+            background-color: #111b21;
+            border-right: 1px solid #374045;
+            overflow-y: auto;
+        }
+       
+        .search-container {
+            padding: 10px;
+            background-color: #202c33;
+        }
+       
+        .search-box {
+            background-color: #202c33;
+            display: flex;
+            align-items: center;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border: 1px solid #374045;
+        }
+       
+        .search-box i {
+            color: #aebac1;
+            margin-right: 10px;
+        }
+       
+        .search-box input {
+            width: 100%;
+            background-color: transparent;
+            border: none;
+            color: #e9edef;
+            outline: none;
+            font-size: 15px;
+        }
+       
+        .search-box input::placeholder {
+            color: #8696a0;
+        }
+       
+        .chat-list {
+            overflow-y: auto;
+        }
+       
+        .chat-item {
+            display: flex;
+            padding: 12px 16px;
+            border-bottom: 1px solid #222d34;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+       
+        .chat-item:hover {
+            background-color: #202c33;
+        }
+       
+        .chat-avatar {
+            width: 49px;
+            height: 49px;
+            border-radius: 50%;
+            margin-right: 15px;
+            object-fit: cover;
+        }
+       
+        .chat-info {
+            flex: 1;
+            min-width: 0;
+        }
+       
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+       
+        .chat-name {
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+       
+        .chat-time {
+            color: #8696a0;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+       
+        .chat-message {
+            color: #8696a0;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+        }
+       
+        .chat-message i {
+            margin-right: 5px;
+            font-size: 16px;
+            color: #53bdeb;
+        }
+       
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #0b141a;
+            background-image: url('https://web.whatsapp.com/img/bg-chat-tile-dark_a4be512e7195b6b733d9110b408f075d.png');
+            background-repeat: repeat;
+            position: relative;
+        }
+       
+        .chat-header {
+            padding: 10px 16px;
+            background-color: #202c33;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #374045;
+        }
+       
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+       
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 65%;
+            margin-bottom: 12px;
+            position: relative;
+            padding: 8px 10px;
+            word-wrap: break-word;
+        }
+       
+        .message-outgoing {
+            align-self: flex-end;
+            background-color: #005c4b;
+            border-radius: 8px 0 8px 8px;
+            margin-left: auto;
+        }
+       
+        .message-incoming {
+            align-self: flex-start;
+            background-color: #202c33;
+            border-radius: 0 8px 8px 8px;
+            margin-right: auto;
+        }
+       
+        .message .content {
+            position: relative;
+        }
+       
+        .message .sender {
+            font-weight: 500;
+            color: #53bdeb;
+            margin-bottom: 2px;
+            font-size: 13px;
+        }
+       
+        .message .timestamp {
+            float: right;
+            margin-left: 10px;
+            margin-bottom: -5px;
+            font-size: 11px;
+            color: #8696a0;
+            align-self: flex-end;
+            padding-top: 5px;
+        }
+       
+        .message-actions {
+            display: none;
+            position: absolute;
+            right: 10px;
+            top: -20px;
+            background-color: #202c33;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+       
+        .message:hover .message-actions {
+            display: flex;
+        }
+       
+        .message-actions button {
+            background-color: transparent;
+            border: none;
+            padding: 5px 8px;
+            cursor: pointer;
+            color: #8696a0;
+            font-size: 13px;
+        }
+       
+        .message-actions button:hover {
+            color: #e9edef;
+        }
+       
+        .input-container {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background-color: #202c33;
+            border-top: 1px solid #374045;
+        }
+       
+        .input-container i {
+            color: #8696a0;
+            font-size: 20px;
+            padding: 8px;
+            cursor: pointer;
+        }
+       
+        .input-container input {
+            flex: 1;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 8px;
+            background-color: #2a3942;
+            color: #e9edef;
+            font-size: 15px;
+            margin: 0 10px;
+        }
+       
+        .input-container input:focus {
+            outline: none;
+        }
+       
+        .input-container button {
+            background-color: transparent;
+            border: none;
+            color: #8696a0;
+            font-size: 20px;
+            padding: 8px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+       
+        .input-container button:hover {
+            color: #00a884;
+        }
+       
+        footer {
+            background-color: #202c33;
+            color: #8696a0;
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+        }
+       
+        .empty-chat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            background-color: #222e35;
+            color: #8696a0;
+            text-align: center;
+            padding: 20px;
+        }
+       
+        .empty-chat i {
+            font-size: 80px;
+            color: #364147;
+            margin-bottom: 20px;
+        }
+       
+        .empty-chat h3 {
+            color: #e9edef;
+            font-weight: normal;
+            margin-bottom: 10px;
+        }
+       
+        .empty-chat p {
+            max-width: 500px;
+            line-height: 1.5;
+        }
+       
+        /* Popup styles */
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #323739;
+            border-radius: 8px;
+            padding: 20px;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            width: 300px;
+        }
+       
+        .popup h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+       
+        .popup input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            background-color: #2a3942;
+            border: 1px solid #374045;
+            border-radius: 4px;
+            color: #e9edef;
+        }
+       
+        .popup-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+       
+        .popup-buttons button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+       
+        .popup-buttons .cancel {
+            background-color: transparent;
+            color: #8696a0;
+        }
+       
+        .popup-buttons .confirm {
+            background-color: #00a884;
+            color: white;
+        }
+       
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+        
+        .admin-badge {
+            background-color: #00a884;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 8px;
+            font-size: 10px;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <img src="{{ logo_url }}" alt="Cinevista Logo" class="logo">
+        </div>
+        <div class="header-icons">
+            <nav>
+                <ul>
+                    <li><a href="{{ url_for('index') }}"><i class="fas fa-home"></i></a></li>
+                    {% if current_user.is_authenticated %}
+                        <li><a href="{{ url_for('cartelera') }}"><i class="fas fa-film"></i></a></li>
+                        {% if current_user.is_admin %}
+                            <li><a href="{{ url_for('admin') }}"><i class="fas fa-user-shield"></i></a></li>
+                        {% endif %}
+                        <li><a href="{{ url_for('chat') }}"><i class="fas fa-comments"></i></a></li>
+                        <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i></a></li>
+                    {% else %}
+                        <li><a href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i></a></li>
+                        <li><a href="{{ url_for('register') }}"><i class="fas fa-user-plus"></i></a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <div class="sidebar">
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Buscar o iniciar un nuevo chat" id="search-input">
+                </div>
+            </div>
+            <div class="chat-list" id="chat-list">
+                <!-- La lista de chats se llenará dinámicamente -->
+            </div>
+        </div>
+        <div class="chat-container">
+            <div class="chat-header">
+                <img src="{{ logo_url }}" alt="Chat Avatar" class="chat-avatar">
+                <div class="chat-info">
+                    <div class="chat-name" id="current-chat-name">Chat - {{ email }}</div>
+                </div>
+                <div class="header-icons">
+                    <i class="fas fa-search"></i>
+                    <i class="fas fa-ellipsis-v"></i>
+                </div>
+            </div>
+           
+            <div class="messages" id="messages">
+                <!-- Aquí se llenarán los mensajes -->
+            </div>
+            <div class="input-container">
+                <i class="far fa-smile"></i>
+                <i class="fas fa-paperclip"></i>
+                <input type="text" id="mensaje" placeholder="Escribe un mensaje" />
+                <button id="enviar"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+   
+   
+    <div class="overlay" id="overlay"></div>
+    <div class="popup" id="receiver-popup">
+        <h3>Enviar mensaje</h3>
+        <div id="admin-list">
+            <!-- Lista de administradores se cargará aquí -->
+        </div>
+        <input type="text" id="receiver-input" placeholder="¿A quién enviar? (Vacío para todos)">
+        <div class="popup-buttons">
+            <button class="cancel" id="cancel-receiver">Cancelar</button>
+            <button class="confirm" id="confirm-receiver">Enviar</button>
+        </div>
+    </div>
+    </main>
+   
+    <footer>
+        © 2025 Cinevista Orvital. Todos los derechos reservados.
+    </footer>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            const email = "{{ email }}";
+            // Corregido el problema de sintaxis JavaScript
+            const isAdmin = Boolean("{{ is_admin }}"); // Convertimos el string a booleano
+            const messagesContainer = $("#messages");
+            const chatListContainer = $("#chat-list");
+            const overlay = $("#overlay");
+            const receiverPopup = $("#receiver-popup");
+            const adminListContainer = $("#admin-list");
+            let tempMessage = "";
+            let currentReceiver = "";
+            
+            // Aquí podrías continuar con tu lógica de chat
+            console.log("¿Es admin?", isAdmin);
+            // Resto del código aquí
+            
+            
+
+            // Cargar administradores
+            function cargarAdministradores() {
+                $.get('/api/administradores', function (data) {
+                    adminListContainer.empty();
+                    
+                    if (data.length > 0) {
+                        const adminHTML = '<p>Selecciona un administrador:</p>';
+                        adminListContainer.append(adminHTML);
+                        
+                        data.forEach(function(admin) {
+                            const adminItemHTML = `
+                                <div class="admin-item" style="padding: 8px; cursor: pointer; margin-bottom: 5px; background-color: #2a3942; border-radius: 4px;" data-email="${admin.email}">
+                                    ${admin.email} <span class="admin-badge">Admin</span>
+                                </div>
+                            `;
+                            adminListContainer.append(adminItemHTML);
+                        });
+                    }
+                });
+            }
+
+            // Evento para seleccionar un admin del popup
+            $(document).on('click', '.admin-item', function() {
+                const adminEmail = $(this).data('email');
+                $("#receiver-input").val(adminEmail);
+            });
+
+            // Cargar los chats
+            function cargarChats() {
+                $.get('/api/chats', function (data) {
+                    chatListContainer.empty();
+                    
+                    if (data.length === 0) {
+                        if (!isAdmin) {
+                            // Si no es admin, cargar la lista de admins como posibles chats
+                            $.get('/api/administradores', function (admins) {
+                                admins.forEach(function(admin) {
+                                    const chatHTML = `
+                                        <div class="chat-item" data-email="${admin.email}">
+                                            <img src="/api/placeholder/49/49" alt="${admin.email}" class="chat-avatar">
+                                            <div class="chat-info">
+                                                <div class="chat-header">
+                                                    <span class="chat-name">${admin.email} <span class="admin-badge">Admin</span></span>
+                                                    <span class="chat-time"></span>
+                                                </div>
+                                                <div class="chat-message">
+                                                    <i class="fas fa-user-shield"></i>
+                                                    Iniciar conversación con administrador
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                    chatListContainer.append(chatHTML);
+                                });
+                            });
+                        }
+                        return;
+                    }
+                    
+                    data.forEach(function(chat) {
+                        const isAdminChat = chat.isAdmin && !isAdmin;
+                        const chatHTML = `
+                            <div class="chat-item" data-email="${chat.email}">
+                                <img src="/api/placeholder/49/49" alt="${chat.name}" class="chat-avatar">
+                                <div class="chat-info">
+                                    <div class="chat-header">
+                                        <span class="chat-name">${chat.email} ${isAdminChat ? '<span class="admin-badge">Admin</span>' : ''}</span>
+                                        <span class="chat-time">${chat.time || ''}</span>
+                                    </div>
+                                    <div class="chat-message">
+                                        <i class="fas fa-check-double"></i>
+                                        ${chat.lastMessage || 'Iniciar una conversación'}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        chatListContainer.append(chatHTML);
+                    });
+                }).fail(function() {
+                    if (!isAdmin) {
+                        // Si no es admin, cargar la lista de admins como posibles chats
+                        $.get('/api/administradores', function (admins) {
+                            chatListContainer.empty();
+                            
+                            admins.forEach(function(admin) {
+                                const chatHTML = `
+                                    <div class="chat-item" data-email="${admin.email}">
+                                        <img src="/api/placeholder/49/49" alt="${admin.email}" class="chat-avatar">
+                                        <div class="chat-info">
+                                            <div class="chat-header">
+                                                <span class="chat-name">${admin.email} <span class="admin-badge">Admin</span></span>
+                                                <span class="chat-time"></span>
+                                            </div>
+                                            <div class="chat-message">
+                                                <i class="fas fa-user-shield"></i>
+                                                Iniciar conversación con administrador
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                chatListContainer.append(chatHTML);
+                            });
+                        });
+                    }
+                });
+            }
+
+            // Cargar los mensajes
+            function cargarMensajes() {
+                const receiver = currentReceiver || '';
+                $.get(`/api/mensajes?receiver=${receiver}`, function (data) {
+                    messagesContainer.empty();
+                   
+                    if (data.length === 0) {
+                        messagesContainer.html(`
+                            <div class="empty-chat">
+                                <i class="far fa-comments"></i>
+                                <h3>Comienza a chatear</h3>
+                                <p>Envía un mensaje para iniciar una conversación.</p>
+                            </div>
+                        `);
+                        return;
+                    }
+                   
+                    data.forEach(function (mensaje) {
+                        const isOutgoing = mensaje.sender === email;
+                        const messageClass = isOutgoing ? 'message-outgoing' : 'message-incoming';
+                       
+                        const mensajeHTML = `
+                            <div class="message ${messageClass}" data-id="${mensaje.id}">
+                                ${!isOutgoing ? `<div class="sender">${mensaje.sender}</div>` : ''}
+                                <div class="content">
+                                    <p>${mensaje.contenido}</p>
+                                    <span class="timestamp">${mensaje.timestamp}</span>
+                                </div>
+                                <div class="message-actions">
+                                    <button class="eliminar-para-mi"><i class="fas fa-trash-alt"></i> Para mí</button>
+                                    <button class="eliminar-para-todos"><i class="fas fa-trash"></i> Para todos</button>
+                                </div>
+                            </div>
+                        `;
+                        messagesContainer.append(mensajeHTML);
+                    });
+                   
+                    // Scroll al último mensaje
+                    messagesContainer.scrollTop(messagesContainer[0].scrollHeight);
+                });
+            }
+
+            // Mostrar popup para enviar mensaje
+            function mostrarPopupDestinatario(mensaje) {
+                tempMessage = mensaje;
+                
+                if (isAdmin) {
+                    // Si es admin, mostrar la lista de usuarios
+                    overlay.show();
+                    receiverPopup.show();
+                    $("#receiver-input").focus();
+                } else if (currentReceiver) {
+                    // Si ya hay un destinatario seleccionado, enviar directamente
+                    enviarMensaje(tempMessage, currentReceiver);
+                } else {
+                    // Si no hay destinatario, mostrar la lista de admins
+                    cargarAdministradores();
+                    overlay.show();
+                    receiverPopup.show();
+                }
+            }
+
+            // Enviar un mensaje
+            function enviarMensaje(contenido, destinatario) {
+                $.ajax({
+                    url: '/api/mensajes',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ contenido: contenido, receiver: destinatario }),
+                    success: function () {
+                        cargarMensajes();
+                        $("#mensaje").val('');
+                        overlay.hide();
+                        receiverPopup.hide();
+                        tempMessage = "";
+                        cargarChats();
+                    }
+                });
+            }
+
+            // Enviar un nuevo mensaje
+            $("#enviar").click(function () {
+                const contenido = $("#mensaje").val().trim();
+                if (contenido) {
+                    mostrarPopupDestinatario(contenido);
+                }
+            });
+           
+            // Enviar mensaje al presionar Enter
+            $("#mensaje").keypress(function(e) {
+                if (e.which === 13) {
+                    const contenido = $(this).val().trim();
+                    if (contenido) {
+                        mostrarPopupDestinatario(contenido);
+                    }
+                }
+            });
+           
+            // Cancelar envío de mensaje
+            $("#cancel-receiver").click(function() {
+                overlay.hide();
+                receiverPopup.hide();
+                tempMessage = "";
+            });
+           
+            // Confirmar envío de mensaje
+            $("#confirm-receiver").click(function() {
+                const receiver = $("#receiver-input").val().trim();
+                enviarMensaje(tempMessage, receiver);
+            });
+            
+            // Eliminar mensaje solo para el usuario
+            $(document).on('click', '.eliminar-para-mi', function () {
+                const id = $(this).closest('.message').data('id');
+                $.post(`/api/mensajes/${id}/eliminar_para_mi`, function () {
+                    cargarMensajes();
+                });
+            });
+            
+            // Eliminar mensaje para todos
+            $(document).on('click', '.eliminar-para-todos', function () {
+                const id = $(this).closest('.message').data('id');
+                $.post(`/api/mensajes/${id}/eliminar_para_todos`, function () {
+                    cargarMensajes();
+                    cargarChats();
+                });
+            });
+            
+            // Si haces clic en un chat, cambia el nombre del chat actual y carga los mensajes
+            $(document).on('click', '.chat-item', function() {
+                const chatEmail = $(this).data('email');
+                currentReceiver = chatEmail;
+                $("#current-chat-name").text(chatEmail);
+                cargarMensajes();
+            });
+            
+            // Cargar los mensajes y chats al cargar la página
+            cargarMensajes();
+            cargarChats();
+            
+            // Si el usuario no es admin, cargar la lista de administradores
+            if (!isAdmin) {
+                cargarAdministradores();
+            }
+    
+        });
+    </script>
+</body>
+</html>

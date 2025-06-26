@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Cinevista Orvital</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <img src="{{ logo_url }}" alt="Intercine Logo" class="logo">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Inicio</a></li>
+                <li><a href="{{ url_for('cartelera') }}">Cartelera</a></li>
+                {% if current_user.is_admin %}
+                <li><a href="{{ url_for('admin') }}">Admin</a></li>
+                {% endif %}
+                <li><a href="{{ url_for('chat') }}">Chat</a></li>  <!-- Aquí está el nuevo botón -->
+                <li><a href="{{ url_for('logout') }}">Cerrar Sesión</a></li>
+            </ul>
+        </nav>
+        <h1>Panel de Administración</h1>
+    </header>
+    <main>
+        <h2>Agregar Nueva Película <span style="font-size: 0.8em;">(trailer)</span></h2>
+        <form action="{{ url_for('agregar_pelicula') }}" method="post" enctype="multipart/form-data">
+            <input type="text" name="titulo" placeholder="Título" required>
+            <input type="text" name="genero" placeholder="Género" required>
+            <input type="number" name="duracion" placeholder="Duración (minutos)" required>
+            <input type="text" name="trailer" placeholder="URL del trailer" required>
+            <input type="file" name="imagen" accept="image/*">
+            <button type="submit">Agregar Película</button>
+        </form>
+
+        <!-- Nuevo formulario para agregar una película completa -->
+        <h2>Agregar Nueva Película <span style="font-size: 0.8em;">(completa)</span></h2>
+        <form action="{{ url_for('agregar_pelicula_completa') }}" method="post" enctype="multipart/form-data">
+            <input type="text" name="titulo" placeholder="Título" required>
+            <input type="text" name="genero" placeholder="Género" required>
+            <input type="number" name="duracion" placeholder="Duración (minutos)" required>
+            <input type="file" name="imagen" accept="image/*" required>
+            <input type="file" name="pelicula_completa" accept="video/*" required>
+            <button type="submit">Agregar Película Completa</button>
+        </form>
+
+        <h2>Cambiar Logo</h2>
+        <form action="{{ url_for('cambiar_logo') }}" method="post" enctype="multipart/form-data">
+            <input type="file" name="logo" accept="image/*" required>
+            <button type="submit">Cambiar Logo</button>
+        </form>
+
+        <h2>Logo Actual</h2>
+        <img src="{{ url_for('obtener_logo') }}" alt="Logo actual" style="max-width: 200px;">
+
+        <h2>Películas Existentes <span style="font-size: 0.8em;">(trailer)</span></h2>
+        {% if peliculas %}
+            <ul>
+                {% for pelicula in peliculas %}
+                    <li>
+                        {{ pelicula.titulo }} -
+                        <a href="{{ url_for('editar_pelicula', id=pelicula.id) }}" class="boton-editar">Editar</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No hay trailers disponibles.</p>
+        {% endif %}
+
+        <h2>Películas Completas Existentes</h2>
+        {% if peliculas_completas %}
+            <ul>
+                {% for pelicula_completa in peliculas_completas %}
+                    <li>
+                        {{ pelicula_completa.titulo }} - 
+                        <a href="{{ url_for('editar_pelicula_completa', id=pelicula_completa.id) }}" class="boton-editar">Editar</a>
+                    </li>
+                 {% endfor %}
+            </ul>
+        {% else %}
+            <p>No hay películas completas disponibles.</p>
+        {% endif %}
+
+    </main>
+    <footer>
+        © 2025 Cinevista Orvital. Todos los derechos reservados.
+    </footer>
+</body>
+</html>

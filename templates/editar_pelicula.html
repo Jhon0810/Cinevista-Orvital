@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Película</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header>
+        <nav>
+            <img src="{{ logo_url }}" alt="Intercine Logo" class="logo">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Inicio</a></li>
+                {% if current_user.is_authenticated %}
+                    <li><a href="{{ url_for('cartelera') }}">Cartelera</a></li>
+                    {% if current_user.is_admin %}
+                        <li><a href="{{ url_for('admin') }}">admin</a></li>
+                    {% endif %}
+                    <li><a href="{{ url_for('chat') }}">Chat</a></li>  <!-- Aquí está el nuevo botón -->
+                    <li><a href="{{ url_for('logout') }}">Cerrar Sesión</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Iniciar Sesión</a></li>
+                    <li><a href="{{ url_for('register') }}">Registrarse</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        <h1>Editar Película</h1>
+    </header>
+    <main>
+        <div class="form-container">
+            <form action="{{ url_for('editar_pelicula', id=id) }}" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="titulo">Título:</label>
+                    <input type="text" id="titulo" name="titulo" value="{{ pelicula['titulo'] }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="genero">Género:</label>
+                    <input type="text" id="genero" name="genero" value="{{ pelicula['genero'] }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="duracion">Duración (minutos):</label>
+                    <input type="number" id="duracion" name="duracion" value="{{ pelicula['duracion'] }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="trailer">Enlace del Trailer:</label>
+                    <input type="url" id="trailer" name="trailer" value="{{ pelicula['trailer'] }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="imagen">Imagen:</label>
+                    <input type="file" id="imagen" name="imagen">
+                    <small class="form-text text-muted">Deja este campo vacío si no deseas cambiar la imagen.</small>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">Guardar Cambios</button>
+                </div>
+            </form>
+            
+            <!-- Formulario separado para eliminar la película -->
+            <form action="{{ url_for('editar_pelicula', id=id) }}" method="post">
+                <input type="hidden" name="eliminar" value="1">
+                <button type="submit" class="btn-eliminar" onclick="return confirm('¿Está seguro de que desea eliminar esta película?');">Eliminar Película</button>
+            </form>
+        </div>
+    </main>
+    <footer>
+        © 2025 Cinevista Orvital. Todos los derechos reservados.
+    </footer>
+</body>
+</html>
