@@ -23,20 +23,20 @@ import logging
 import pymssql
 
 app = Flask(__name__)
-# Clave secreta
+# === CONFIGURACIÓN FLASK ===
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 
-# === CONEXIÓN SQLALCHEMY PARA SQL SERVER (pymssql) ===
+# === SQLALCHEMY + PYMSSQL PARA AZURE SQL ===
 app.config['SQLALCHEMY_DATABASE_URI'] = (
     'mssql+pymssql://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# === CACHE ===
+# === CACHE SIMPLE ===
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
 
-# === DB ===
+# === BASE DE DATOS SQLALCHEMY ===
 db = SQLAlchemy(app)
 
 # === LOGIN MANAGER ===
@@ -51,14 +51,14 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi'}
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Servidor Flask iniciado correctamente.")
 
-# === FUNCIÓN PARA CONEXIÓN MANUAL CON PYMSSQL ===
+# === FUNCIÓN DE CONEXIÓN MANUAL A SQL SERVER ===
 def get_db_connection():
     try:
         connection = pymssql.connect(
-            server='tu-servidor-name.database.windows.net',  # ← Reemplaza por tu servidor real
-            user='sqladmin',                                 # ← Usuario Azure SQL
-            password='servidor0810.',                        # ← Contraseña
-            database='CineDB',                               # ← Base de datos
+            server='tu-servidor-name.database.windows.net',  # ← Cambia por tu servidor real
+            user='sqladmin',
+            password='servidor0810.',
+            database='CineDB',
             port=1433,
             timeout=20,
             login_timeout=20
@@ -69,7 +69,7 @@ def get_db_connection():
         logging.error(f"❌ Error en la conexión a la base de datos: {e}")
         raise
 
-# === MANEJO DE ERRORES DE BASE DE DATOS ===
+# === MANEJO DE ERRORES DE BD ===
 def handle_db_error(error):
     return jsonify({
         'success': False,
@@ -77,7 +77,7 @@ def handle_db_error(error):
         'message': 'Error en la base de datos'
     }), 500
 
-# === DECORADOR PARA USAR CONEXIÓN PYMSSQL EN FUNCIONES ===
+# === DECORADOR PARA FUNCIONES CON CONEXIÓN MANUAL ===
 def with_db_connection(f):
     def wrapper(*args, **kwargs):
         conn = None
