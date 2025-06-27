@@ -19,10 +19,15 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_caching import Cache
 import filetype
 import io
+import logging
 
 app = Flask(__name__)
+# Configuración de Flask
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://Jhon0810:sqladmin@DESKTOP-PTO39EK\\PCGAMER_5:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no'
+
+# ✅ SQLALCHEMY_DATABASE_URI corregida para Azure SQL Database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
@@ -45,12 +50,12 @@ def get_db_connection():
     try:
         connection = pyodbc.connect(
             'DRIVER={ODBC Driver 18 for SQL Server};'
-            'SERVER=DESKTOP-PTO39EK\\PCGAMER_5,1433;'
-            'DATABASE=sqladmin;'
-            'UID=Jhon0810;'
-            'PWD=admin0810.;'
-            'TrustServerCertificate=yes;'
-            'Encrypt=no;'
+            'SERVER=tu-servidor-name.database.windows.net;'  # ← Cambiar por tu servidor
+            'DATABASE=CineDB;'                               # ← Tu base de datos
+            'UID=sqladmin;'                                  # ← Tu usuario
+            'PWD=servidor0810.;'                               # ← Tu contraseña
+            'Encrypt=yes;'                                   # ← Para Azure
+            'TrustServerCertificate=no;'                    # ← Para Azure
         )
         logging.info("Conexión exitosa a la base de datos.")
         return connection
