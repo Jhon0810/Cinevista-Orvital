@@ -71,7 +71,7 @@ def with_db_connection(f):
         try:
             conn = get_db_connection()
             return f(conn, *args, **kwargs)
-        except pyodbc.Error as e:
+        except pymssql.Error as e:
             return handle_db_error(e)
         finally:
             if conn:
