@@ -20,71 +20,59 @@ from flask_caching import Cache
 import filetype
 import io
 import logging
-import pymssql
 
 app = Flask(__name__)
-# === CONFIGURACIÓN FLASK ===
+# Configuración de Flask
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 
-# === SQLALCHEMY + PYMSSQL PARA AZURE SQL ===
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    'mssql+pymssql://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB'
-)
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# ✅ SQLALCHEMY_DATABASE_URI corregida para Azure SQL Database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no'
 
-# === CACHE SIMPLE ===
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
-
-# === BASE DE DATOS SQLALCHEMY ===
 db = SQLAlchemy(app)
 
-# === LOGIN MANAGER ===
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# === ARCHIVOS PERMITIDOS ===
+
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi'}
 
-# === LOGGING ===
+
+# Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Servidor Flask iniciado correctamente.")
 
-# === FUNCIÓN DE CONEXIÓN MANUAL A SQL SERVER ===
+# Conexión a SQL Server
 def get_db_connection():
     try:
-        connection = pymssql.connect(
-            server='tu-servidor-name.database.windows.net',  # ← Cambia por tu servidor real
-            user='sqladmin',
-            password='servidor0810.',
-            database='CineDB',
-            port=1433,
-            timeout=20,
-            login_timeout=20
+        connection = pyodbc.connect(
+            'DRIVER={ODBC Driver 18 for SQL Server};'
+            'SERVER=tu-servidor-name.database.windows.net;'  # ← Cambiar por tu servidor
+            'DATABASE=CineDB;'                               # ← Tu base de datos
+            'UID=sqladmin;'                                  # ← Tu usuario
+            'PWD=servidor0810.;'                               # ← Tu contraseña
+            'Encrypt=yes;'                                   # ← Para Azure
+            'TrustServerCertificate=no;'                    # ← Para Azure
         )
         logging.info("Conexión exitosa a la base de datos.")
         return connection
-    except Exception as e:
-        logging.error(f"❌ Error en la conexión a la base de datos: {e}")
+    except pyodbc.Error as e:
+        logging.error(f"Error en la conexión: {e}")
         raise
 
-# === MANEJO DE ERRORES DE BD ===
 def handle_db_error(error):
-    return jsonify({
-        'success': False,
-        'error': str(error),
-        'message': 'Error en la base de datos'
-    }), 500
+    return jsonify({'success': False, 'error': str(error), 'message': 'Error en la base de datos'}), 500
 
-# === DECORADOR PARA FUNCIONES CON CONEXIÓN MANUAL ===
 def with_db_connection(f):
     def wrapper(*args, **kwargs):
         conn = None
         try:
             conn = get_db_connection()
             return f(conn, *args, **kwargs)
-        except pymssql.Error as e:
+        except pyodbc.Error as e:
             return handle_db_error(e)
         finally:
             if conn:
