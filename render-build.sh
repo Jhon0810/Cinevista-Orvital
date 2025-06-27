@@ -1,30 +1,29 @@
 services:
   - type: web
-    name: cinevista
+    name: cinevista-Orvital
     env: python
     buildCommand: |
-      # Actualizar sistema
-      sudo apt-get update
-      
+      # Actualizar el sistema
+      apt-get update
+
       # Instalar dependencias del sistema
-      sudo apt-get install -y curl apt-transport-https gnupg lsb-release
-      
+      apt-get install -y curl apt-transport-https gnupg lsb-release
+
       # Agregar repositorio de Microsoft
-      curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
-      curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
-      
+      curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+      curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list > /etc/apt/sources.list.d/mssql-release.list
+
       # Actualizar repositorios
-      sudo apt-get update
-      
-      # Instalar ODBC Driver 18 for SQL Server
-      sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
-      
-      # Instalar unixODBC
-      sudo apt-get install -y unixodbc-dev
-      
-      # Instalar dependencias de Python
+      apt-get update
+
+      # Instalar el Driver ODBC 18 para SQL Server y unixODBC
+      ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+      # Instalar dependencias Python del proyecto
       pip install -r requirements.txt
+
     startCommand: python app.py
+
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
