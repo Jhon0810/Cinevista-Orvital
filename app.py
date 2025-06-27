@@ -20,13 +20,14 @@ from flask_caching import Cache
 import filetype
 import io
 import logging
+import pymssql
 
 app = Flask(__name__)
 # Configuración de Flask
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 
-# ✅ SQLALCHEMY_DATABASE_URI corregida para Azure SQL Database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no'
+# ✅ SQLALCHEMY_DATABASE_URI corregida para Azure SQL Database con pymssql
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pymssql://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
@@ -37,29 +38,27 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi'}
-
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Servidor Flask iniciado correctamente.")
 
-# Conexión a SQL Server
+# Conexión a SQL Server con pymssql
 def get_db_connection():
     try:
-        connection = pyodbc.connect(
-            'DRIVER={ODBC Driver 18 for SQL Server};'
-            'SERVER=tu-servidor-name.database.windows.net;'  # ← Cambiar por tu servidor
-            'DATABASE=CineDB;'                               # ← Tu base de datos
-            'UID=sqladmin;'                                  # ← Tu usuario
-            'PWD=servidor0810.;'                               # ← Tu contraseña
-            'Encrypt=yes;'                                   # ← Para Azure
-            'TrustServerCertificate=no;'                    # ← Para Azure
+        connection = pymssql.connect(
+            server='tu-servidor-name.database.windows.net',  # ← Cambiar por tu servidor
+            user='sqladmin',                                 # ← Tu usuario
+            password='servidor0810.',                        # ← Tu contraseña
+            database='CineDB',                               # ← Tu base de datos
+            port=1433,
+            timeout=20,
+            login_timeout=20
         )
         logging.info("Conexión exitosa a la base de datos.")
         return connection
-    except pyodbc.Error as e:
+    except Exception as e:
         logging.error(f"Error en la conexión: {e}")
         raise
 
