@@ -23,35 +23,42 @@ import logging
 import pymssql
 
 app = Flask(__name__)
-# Configuración de Flask
+# Clave secreta
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 
-# ✅ SQLALCHEMY_DATABASE_URI corregida para Azure SQL Database con pymssql
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pymssql://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB'
-
+# === CONEXIÓN SQLALCHEMY PARA SQL SERVER (pymssql) ===
+app.config['SQLALCHEMY_DATABASE_URI'] = (
+    'mssql+pymssql://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB'
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# === CACHE ===
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
+
+# === DB ===
 db = SQLAlchemy(app)
 
+# === LOGIN MANAGER ===
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# === ARCHIVOS PERMITIDOS ===
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi'}
 
-# Configuración de logging
+# === LOGGING ===
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Servidor Flask iniciado correctamente.")
 
-# Conexión a SQL Server con pymssql
+# === FUNCIÓN PARA CONEXIÓN MANUAL CON PYMSSQL ===
 def get_db_connection():
     try:
         connection = pymssql.connect(
-            server='tu-servidor-name.database.windows.net',  # ← Cambiar por tu servidor
-            user='sqladmin',                                 # ← Tu usuario
-            password='servidor0810.',                        # ← Tu contraseña
-            database='CineDB',                               # ← Tu base de datos
+            server='tu-servidor-name.database.windows.net',  # ← Reemplaza por tu servidor real
+            user='sqladmin',                                 # ← Usuario Azure SQL
+            password='servidor0810.',                        # ← Contraseña
+            database='CineDB',                               # ← Base de datos
             port=1433,
             timeout=20,
             login_timeout=20
@@ -59,12 +66,18 @@ def get_db_connection():
         logging.info("Conexión exitosa a la base de datos.")
         return connection
     except Exception as e:
-        logging.error(f"Error en la conexión: {e}")
+        logging.error(f"❌ Error en la conexión a la base de datos: {e}")
         raise
 
+# === MANEJO DE ERRORES DE BASE DE DATOS ===
 def handle_db_error(error):
-    return jsonify({'success': False, 'error': str(error), 'message': 'Error en la base de datos'}), 500
+    return jsonify({
+        'success': False,
+        'error': str(error),
+        'message': 'Error en la base de datos'
+    }), 500
 
+# === DECORADOR PARA USAR CONEXIÓN PYMSSQL EN FUNCIONES ===
 def with_db_connection(f):
     def wrapper(*args, **kwargs):
         conn = None
