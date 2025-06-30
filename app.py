@@ -50,7 +50,7 @@ def get_db_connection():
     try:
         connection = pyodbc.connect(
             'DRIVER={ODBC Driver 18 for SQL Server};'
-            'SERVER=tu-servidor-name.database.windows.net;'  # ← Cambiar por tu servidor
+            'SERVER=mi-servidor-bd-2024.database.windows.net;'  # ← Cambiar por tu servidor
             'DATABASE=CineDB;'                               # ← Tu base de datos
             'UID=sqladmin;'                                  # ← Tu usuario
             'PWD=servidor0810.;'                               # ← Tu contraseña
