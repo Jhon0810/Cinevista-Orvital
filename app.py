@@ -1,4 +1,4 @@
-import sqlite3
+import psycopg2
 from flask import Flask, render_template, request, Response, redirect, url_for, jsonify, flash, send_file, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,7 +6,6 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
 import json
-import pyodbc
 import logging
 from io import BytesIO
 from reportlab.pdfgen import canvas
@@ -19,15 +18,13 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_caching import Cache
 import filetype
 import io
-import logging
 
 app = Flask(__name__)
 # Configuración de Flask
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 
-# ✅ SQLALCHEMY_DATABASE_URI corregida para Azure SQL Database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://sqladmin:servidor0810.@tu-servidor-name.database.windows.net:1433/CineDB?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no'
-
+# ✅ Configuración para PostgreSQL con SQLAlchemy
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://postgres:RTJh0n_2025@localhost:5432/CineDB'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
@@ -37,29 +34,25 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi'}
-
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Servidor Flask iniciado correctamente.")
 
-# Conexión a SQL Server
+# Conexión directa a PostgreSQL (si en algún punto no usas SQLAlchemy)
 def get_db_connection():
     try:
-        connection = pyodbc.connect(
-            'DRIVER={ODBC Driver 18 for SQL Server};'
-            'SERVER=mi-servidor-bd-2024.database.windows.net;'  # ← Cambiar por tu servidor
-            'DATABASE=CineDB;'                               # ← Tu base de datos
-            'UID=sqladmin;'                                  # ← Tu usuario
-            'PWD=servidor0810.;'                               # ← Tu contraseña
-            'Encrypt=yes;'                                   # ← Para Azure
-            'TrustServerCertificate=no;'                    # ← Para Azure
+        connection = psycopg2.connect(
+            host="localhost",
+            database="CineDB",
+            user="postgres",          # ← Cambiar por tu usuario
+            password="RTJh0n_2025", # ← Cambiar por tu contraseña
+            port="5432"
         )
-        logging.info("Conexión exitosa a la base de datos.")
+        logging.info("Conexión exitosa a PostgreSQL.")
         return connection
-    except pyodbc.Error as e:
+    except psycopg2.Error as e:
         logging.error(f"Error en la conexión: {e}")
         raise
 
@@ -72,7 +65,7 @@ def with_db_connection(f):
         try:
             conn = get_db_connection()
             return f(conn, *args, **kwargs)
-        except pyodbc.Error as e:
+        except psycopg2.Error as e:
             return handle_db_error(e)
         finally:
             if conn:
@@ -83,6 +76,7 @@ def with_db_connection(f):
 # Validación de archivos
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 
 # Código secreto para administradores
@@ -100,7 +94,7 @@ class User(UserMixin):
 def load_user(user_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, password, is_admin FROM Usuarios WHERE id = ?", (user_id,))
+    cursor.execute("SELECT id, email, password, is_admin FROM Usuarios WHERE id = %s", (user_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -121,14 +115,14 @@ def register():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM Usuarios WHERE email = ?", (email,))
+        cursor.execute("SELECT COUNT(*) FROM Usuarios WHERE email = %s", (email,))
         if cursor.fetchone()[0] > 0:
             conn.close()
             flash('El correo electrónico ya está registrado', 'error')
             return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password)
-        cursor.execute("INSERT INTO Usuarios (email, password, is_admin) VALUES (?, ?, ?)",
+        cursor.execute("INSERT INTO Usuarios (email, password, is_admin) VALUES (%s, %s, %s)",
                        (email, hashed_password, is_admin))
         conn.commit()
         conn.close()
@@ -151,7 +145,7 @@ def login():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, email, password, is_admin FROM Usuarios WHERE email = ?", (email,))
+        cursor.execute("SELECT id, email, password, is_admin FROM Usuarios WHERE email = %s", (email,))
         row = cursor.fetchone()
         conn.close()
 
@@ -198,7 +192,6 @@ def index():
 
 @app.route('/cartelera', methods=['GET'])
 @login_required
-@cache.cached(timeout=300)
 def cartelera():
     try:
         conn = get_db_connection()
@@ -211,12 +204,10 @@ def cartelera():
 
         cursor.execute("""
             SELECT id, titulo, genero, duracion, imagen, trailer
-            FROM (
-                SELECT *, ROW_NUMBER() OVER (ORDER BY id DESC) AS rownum
-                FROM Peliculas
-            ) AS paged
-            WHERE rownum BETWEEN ? AND ?
-        """, offset + 1, offset + per_page)
+            FROM Peliculas
+            ORDER BY id DESC
+            LIMIT %s OFFSET %s
+        """, (per_page, offset))
 
         peliculas = [
             {
@@ -256,7 +247,7 @@ def cartelera():
             logo_url=url_for('obtener_logo')
         )
 
-    except pyodbc.Error as e:
+    except psycopg2.Error as e:
         return jsonify({'error': str(e)})
 
 
@@ -277,13 +268,13 @@ def buscar():
             sql = """
                 SELECT id, titulo, genero, duracion, imagen, trailer 
                 FROM Peliculas 
-                WHERE LOWER(titulo) LIKE ? OR LOWER(genero) LIKE ?
+                WHERE LOWER(titulo) LIKE %s OR LOWER(genero) LIKE %s
             """
         else:
             sql = """
                 SELECT id, titulo, genero, duracion, imagen 
                 FROM Peliculas_Completas 
-                WHERE LOWER(titulo) LIKE ? OR LOWER(genero) LIKE ?
+                WHERE LOWER(titulo) LIKE %s OR LOWER(genero) LIKE %s
             """
         
         like_query = f"%{query.lower()}%"
@@ -379,8 +370,8 @@ def admin(conn):
             logo_url=url_for('obtener_logo')
         )
 
-    except pyodbc.Error as e:
-        return handle_db_error(e)
+    except psycopg2.Error as e:
+        return jsonify({'error': str(e)})
 
 
 @app.route('/agregar_pelicula', methods=['POST'])
@@ -401,13 +392,21 @@ def agregar_pelicula(conn):
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO Peliculas (titulo, genero, duracion, imagen, trailer)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
         """, (titulo, genero, duracion, imagen_binaria, trailer))
         conn.commit()
+
+        # 🔥 limpiar caché de cartelera para que se actualice al instante
+        try:
+            cache.delete_memoized(cartelera)
+        except Exception:
+            pass
+
         flash('Película agregada exitosamente.', 'success')
         return redirect(url_for('admin'))
-    except pyodbc.Error as e:
-        return handle_db_error(e)
+    except psycopg2.Error as e:
+        return jsonify({'error': str(e)})
+
 
 
 @app.route('/imagen_pelicula/<int:id>')
@@ -415,14 +414,16 @@ def agregar_pelicula(conn):
 def obtener_imagen_pelicula(conn, id):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT imagen FROM Peliculas WHERE id = ?", (id,))
+        cursor.execute("SELECT imagen FROM Peliculas WHERE id = %s", (id,))
         row = cursor.fetchone()
         if row and row[0]:
-            return send_file(BytesIO(row[0]), mimetype='image/jpeg')  # Ajusta según el formato de imagen
+            return send_file(BytesIO(row[0]), mimetype='image/jpeg')  # 👈 fijo
         else:
-            return send_file("static/img/default.jpg", mimetype='image/jpeg')  # Imagen por defecto si no hay imagen
-    except pyodbc.Error as e:
+            return send_file(os.path.join("static", "img", "default.jpg"), mimetype='image/jpeg')
+    except psycopg2.Error as e:
         return handle_db_error(e)
+
+
 
 
 @app.route('/peliculas_existentes')
@@ -443,8 +444,8 @@ def peliculas_existentes(conn):
             for row in cursor.fetchall()
         ]
         return render_template('editar_pelicula.html', peliculas=peliculas)
-    except pyodbc.Error as e:
-        return handle_db_error(e)
+    except psycopg2.Error as e:
+        return jsonify({'error': str(e)})
 
 
 @app.route('/editar_pelicula/<int:id>', methods=['GET', 'POST'])
@@ -452,50 +453,66 @@ def peliculas_existentes(conn):
 @login_required
 def editar_pelicula(conn, id):
     if request.method == 'POST':
-        # Verificar si se presionó el botón de eliminar
+        # Eliminar
         if 'eliminar' in request.form:
             try:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM Peliculas WHERE id = ?", (id,))
+                cursor.execute("DELETE FROM Peliculas WHERE id = %s", (id,))
                 conn.commit()
                 flash('Película eliminada exitosamente.', 'success')
+
+                # 🔥 invalidar cache de cartelera para que los cambios se vean
+                try:
+                    cache.delete_memoized(cartelera)
+                except Exception:
+                    pass
+
                 return redirect(url_for('admin'))
-            except pyodbc.Error as e:
+            except psycopg2.Error as e:
                 return handle_db_error(e)
 
-        # Si no se presionó el botón de eliminar, se actualiza la película
-        titulo = request.form['titulo']
-        genero = request.form['genero']
-        duracion = int(request.form['duracion'])
-        trailer = request.form['trailer']
+        # Actualizar
+        titulo = request.form.get('titulo', '')
+        genero = request.form.get('genero', '')
+        duracion = int(request.form.get('duracion', 0))
+        trailer = request.form.get('trailer', '')
         imagen_binaria = None
 
         if 'imagen' in request.files and request.files['imagen'].filename:
-            imagen = request.files['imagen']
-            imagen_binaria = imagen.read()  # Convertir la imagen a binario
-        
+            imagen_binaria = request.files['imagen'].read()
+
         try:
             cursor = conn.cursor()
-            query = "UPDATE Peliculas SET titulo = ?, genero = ?, duracion = ?, trailer = ?"
-            params = [titulo, genero, duracion, trailer]
-
             if imagen_binaria:
-                query += ", imagen = ?"
-                params.append(imagen_binaria)
+                cursor.execute("""
+                    UPDATE Peliculas
+                    SET titulo = %s, genero = %s, duracion = %s, trailer = %s, imagen = %s
+                    WHERE id = %s
+                """, (titulo, genero, duracion, trailer, imagen_binaria, id))
+            else:
+                cursor.execute("""
+                    UPDATE Peliculas
+                    SET titulo = %s, genero = %s, duracion = %s, trailer = %s
+                    WHERE id = %s
+                """, (titulo, genero, duracion, trailer, id))
 
-            query += " WHERE id = ?"
-            params.append(id)
-
-            cursor.execute(query, params)
             conn.commit()
             flash('Película editada exitosamente.', 'success')
+
+            # 🔥 invalidar cache de cartelera para que se vea de inmediato
+            try:
+                cache.delete_memoized(cartelera)
+            except Exception:
+                pass
+
             return redirect(url_for('admin'))
-        except pyodbc.Error as e:
+        except psycopg2.Error as e:
             return handle_db_error(e)
 
+    # GET: obtener datos para mostrar formulario
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, titulo, genero, duracion, trailer FROM Peliculas WHERE id = ?", (id,))
+        cursor.execute("SELECT id, titulo, genero, duracion, trailer FROM Peliculas WHERE id = %s", (id,))
         pelicula = cursor.fetchone()
         if not pelicula:
             return "Película no encontrada", 404
@@ -507,15 +524,11 @@ def editar_pelicula(conn, id):
             "duracion": pelicula[3],
             "trailer": pelicula[4]
         }
-        
-        # Cargar la configuración (incluyendo logo)
-        configuracion = cargar_configuracion()
-        logo = configuracion.get('logo', 'logo.png')
-
         return render_template('editar_pelicula.html', pelicula=pelicula_data, id=id, logo_url=url_for('obtener_logo'))
-    
-    except pyodbc.Error as e:
+    except psycopg2.Error as e:
         return handle_db_error(e)
+
+
 
 
 @app.route('/eliminar_pelicula/<int:id>', methods=['POST'])
@@ -524,12 +537,12 @@ def editar_pelicula(conn, id):
 def eliminar_pelicula(conn, id):
     try:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM Peliculas WHERE id = ?", (id,))
+        cursor.execute("DELETE FROM Peliculas WHERE id = %s", (id,))
         conn.commit()
         flash('Película eliminada exitosamente.', 'success')
         return redirect(url_for('admin'))
-    except pyodbc.Error as e:
-        return handle_db_error(e)
+    except psycopg2.Error as e:
+        return jsonify({'error': str(e)})
 
 
 def get_logo_from_db():
@@ -546,7 +559,7 @@ def update_logo_in_db(file_data):
     """Actualiza el logo en la base de datos."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE Configuracion SET valor = ? WHERE clave = 'logo'", (file_data,))
+    cursor.execute("UPDATE Configuracion SET valor = %s WHERE clave = 'logo'", (file_data,))
     conn.commit()
     conn.close()
 
@@ -639,13 +652,16 @@ def agregar_pelicula_completa():
             imagen = request.files['imagen']
             imagen_binaria = imagen.read()
 
-        # Leer video como binario
-        pelicula_binaria = None
+        # Guardar video en disco y obtener ruta
+        video_path = None
         if 'pelicula_completa' in request.files and allowed_file(request.files['pelicula_completa'].filename):
             pelicula = request.files['pelicula_completa']
-            pelicula_binaria = pelicula.read()
+            if pelicula and allowed_file(pelicula.filename):
+                filename = secure_filename(pelicula.filename)
+                video_path = os.path.join(app.config['VIDEO_FOLDER'], filename)
+                pelicula.save(video_path)  # Guardar en disco
 
-        if not imagen_binaria or not pelicula_binaria:
+        if not imagen_binaria or not video_path:
             flash("Error: Debes subir una imagen y un video.", "error")
             return redirect(url_for('admin'))
 
@@ -653,39 +669,46 @@ def agregar_pelicula_completa():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO Peliculas_Completas (titulo, genero, duracion, imagen, pelicula_completa)
-            VALUES (?, ?, ?, ?, ?)
-        """, (titulo, genero, duracion, imagen_binaria, pelicula_binaria))
+            INSERT INTO Peliculas_Completas (titulo, genero, duracion, imagen, ruta_video)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (titulo, genero, duracion, imagen_binaria, video_path))
         conn.commit()
         conn.close()
 
+        # 🔥 limpiar caché de cartelera para que aparezca de inmediato
+        try:
+            cache.delete_memoized(cartelera)
+        except Exception:
+            pass
+
         flash('Película completa agregada exitosamente', 'success')
         return redirect(url_for('admin'))
-    except pyodbc.Error as e:
+    except psycopg2.Error as e:
         return jsonify({'error': str(e)})
 
 
-# Obtener imagen de película completa (funciona con Python 3.13+)
+
+# 🔹 Ruta para obtener la imagen
 @app.route('/imagen_pelicula_completa/<int:id>')
 def obtener_imagen_pelicula_completa(id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT imagen FROM Peliculas_Completas WHERE id = ?", (id,))
+        cursor.execute("SELECT imagen FROM peliculas_completas WHERE id = %s", (id,))
         row = cursor.fetchone()
         conn.close()
 
         if row and row[0]:
-            image_data = row[0]
-            kind = filetype.guess(image_data)
-            mime_type = kind.mime if kind else 'image/jpeg'
-            return send_file(BytesIO(image_data), mimetype=mime_type)
+            image_data = row[0]  # BYTEA de la DB
+            return send_file(BytesIO(image_data), mimetype='image/jpeg')  # 👈 fijo a jpeg
 
-        return send_file('static/img/default.jpg', mimetype='image/jpeg')
+        # Imagen por defecto si no existe
+        return send_file(os.path.join("static", "img", "default.jpg"), mimetype='image/jpeg')
 
     except Exception as e:
         print(f"[ERROR] Imagen no cargada: {e}")
-        return send_file('static/img/default.jpg', mimetype='image/jpeg')
+        return send_file(os.path.join("static", "img", "default.jpg"), mimetype='image/jpeg')
+
 
 # Obtener video de película completa
 @app.route('/video_pelicula_completa/<int:id>')
@@ -693,41 +716,45 @@ def obtener_video_pelicula_completa(id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT pelicula_completa FROM Peliculas_Completas WHERE id = ?", (id,))
+        # Ahora buscamos la ruta del archivo, no el binario
+        cursor.execute("SELECT ruta_video FROM Peliculas_Completas WHERE id = %s", (id,))
         row = cursor.fetchone()
         conn.close()
 
         if not row or not row[0]:
             return "Video no encontrado", 404
 
-        video_data = row[0]
-        video_stream = io.BytesIO(video_data)
-        video_size = len(video_data)
+        video_path = row[0]
+
+        if not os.path.exists(video_path):
+            return "Archivo de video no encontrado en el servidor", 404
 
         # Soporte para Range (adelantar video)
         range_header = request.headers.get('Range', None)
         if range_header:
-            # Ejemplo de header: "Range: bytes=12345-"
+            file_size = os.path.getsize(video_path)
             byte_range = range_header.replace('bytes=', '').split('-')
-            start = int(byte_range[0])
-            end = int(byte_range[1]) if byte_range[1] else video_size - 1
+            start = int(byte_range[0]) if byte_range[0] else 0
+            end = int(byte_range[1]) if byte_range[1] else file_size - 1
             length = end - start + 1
 
-            video_stream.seek(start)
-            data = video_stream.read(length)
+            with open(video_path, 'rb') as f:
+                f.seek(start)
+                data = f.read(length)
 
             rv = Response(data, 206, mimetype='video/mp4', direct_passthrough=True)
-            rv.headers.add('Content-Range', f'bytes {start}-{end}/{video_size}')
+            rv.headers.add('Content-Range', f'bytes {start}-{end}/{file_size}')
             rv.headers.add('Accept-Ranges', 'bytes')
             rv.headers.add('Content-Length', str(length))
             return rv
 
-        # Si no se pide rango, se devuelve todo el video
-        return Response(video_stream.read(), mimetype='video/mp4')
+        # Si no se pide rango, devolver el archivo completo
+        return send_file(video_path, mimetype='video/mp4')
 
     except Exception as e:
         print(f"[ERROR] No se pudo reproducir el video: {e}")
         return "Error interno del servidor", 500
+
 
 
 @app.route('/peliculas_completas')
@@ -736,59 +763,58 @@ def obtener_video_pelicula_completa(id):
 def peliculas_completas(conn):
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, titulo, genero, duracion, imagen, pelicula_completa FROM Peliculas_Completas")
+        cursor.execute("SELECT id, titulo, genero, duracion FROM Peliculas_Completas ORDER BY id DESC")
         peliculas = [
             {
                 "id": row[0],
                 "titulo": row[1],
                 "genero": row[2],
                 "duracion": row[3],
-                "imagen": f"data:image/jpeg;base64,{row[4]}",
-                "pelicula_completa": f"data:video/mp4;base64,{row[5]}"
+                "imagen": url_for('obtener_imagen_pelicula_completa', id=row[0]),
+                "pelicula_completa": url_for('obtener_video_pelicula_completa', id=row[0])
             }
             for row in cursor.fetchall()
         ]
         return render_template('peliculas_completas.html', peliculas=peliculas, logo_url=url_for('obtener_logo'))
-    except pyodbc.Error as e:
+    except psycopg2.Error as e:
         return handle_db_error(e)
+
 
 
 
 @app.route('/ver_pelicula/<int:pelicula_id>')
 def ver_pelicula(pelicula_id):
+    conn = None
     try:
-        # Connect to database
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # Get video path from database
-        cursor.execute("SELECT pelicula_completa FROM Peliculas_Completas WHERE id = ?", (pelicula_id,))
+        cursor.execute("SELECT ruta_video FROM Peliculas_Completas WHERE id = %s", (pelicula_id,))
         resultado = cursor.fetchone()
-        
-        if not resultado:
+
+        if not resultado or not resultado[0]:
             return "Película no encontrada", 404
-        
+
         video_path = resultado[0]
-        
-        # Check if the result is already a file path or if it's binary data
-        if isinstance(video_path, bytes):
-            # If it's binary data stored in the database, create a response
+
+        # Si en algún caso guardaste el binario en DB:
+        if isinstance(video_path, (bytes, bytearray)):
             response = make_response(video_path)
             response.headers.set('Content-Type', 'video/mp4')
             return response
+
+        # Si es ruta, servir archivo (obtener_video_pelicula_completa también maneja Range)
+        if os.path.isfile(video_path):
+            return send_file(video_path, mimetype='video/mp4')
         else:
-            # If it's a file path, serve the file
-            if os.path.isfile(video_path):
-                return send_file(video_path, mimetype='video/mp4')
-            else:
-                return "Archivo de video no encontrado", 404
-    
+            return "Archivo de video no encontrado", 404
+
     except Exception as e:
-        print(f"Error al reproducir video: {e}")
+        logging.exception(f"Error al reproducir video: {e}")
         return "Error al reproducir video", 500
-    
     finally:
-        conn.close()
+        if conn:
+            conn.close()
+
 
 @app.route('/editar_pelicula_completa/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -798,30 +824,45 @@ def editar_pelicula_completa(id):
         flash('No tienes permisos para editar películas', 'error')
         return redirect(url_for('index'))
 
-    # Conexión a la base de datos
     conn = get_db_connection()
     cursor = conn.cursor()
 
     # Buscar la película por su ID
-    cursor.execute("SELECT * FROM Peliculas_Completas WHERE id = ?", (id,))
-    pelicula = cursor.fetchone()
+    cursor.execute("SELECT id, titulo, genero, duracion, imagen, ruta_video FROM peliculas_completas WHERE id = %s", (id,))
+    row = cursor.fetchone()
 
-    if pelicula is None:
+    if row is None:
         conn.close()
         flash('Película no encontrada', 'error')
         return redirect(url_for('admin'))
 
+    # Convertir la fila a diccionario para usar en la plantilla
+    pelicula = {
+        "id": row[0],
+        "titulo": row[1],
+        "genero": row[2],
+        "duracion": row[3],
+        "imagen": row[4],
+        "ruta_video": row[5]
+    }
+
     if request.method == 'POST':
         # Si se presiona el botón "Eliminar"
         if 'eliminar' in request.form:
-            cursor.execute("DELETE FROM Peliculas_Completas WHERE id = ?", (id,))
+            cursor.execute("DELETE FROM peliculas_completas WHERE id = %s", (id,))
             conn.commit()
             conn.close()
+            
+            # Limpiar caché de cartelera
+            try:
+                cache.clear()
+            except Exception:
+                pass
             
             flash('Película eliminada con éxito', 'success')
             return redirect(url_for('admin'))
 
-        # Preparar los datos para actualizar
+        # Datos del formulario
         titulo = request.form['titulo']
         genero = request.form['genero']
         duracion = int(request.form['duracion'])
@@ -833,54 +874,63 @@ def editar_pelicula_completa(id):
             if file_imagen.filename != '':
                 imagen = file_imagen.read()
 
-        # Manejo de video
-        pelicula_completa = None
+        # Manejo de video (se guarda en disco, no en la base de datos)
+        ruta_video = None
         if 'video' in request.files:
             file_video = request.files['video']
             if file_video.filename != '':
-                pelicula_completa = file_video.read()
+                filename = secure_filename(file_video.filename)
+                video_path = os.path.join(app.config['VIDEO_FOLDER'], filename)
+                file_video.save(video_path)
+                ruta_video = video_path
 
-        # Preparar la consulta de actualización
-        if imagen and pelicula_completa:
+        # Preparar la consulta de actualización dinámicamente
+        if imagen and ruta_video:
             cursor.execute("""
-                UPDATE Peliculas_Completas 
-                SET titulo = ?, genero = ?, duracion = ?, 
-                    imagen = ?, pelicula_completa = ? 
-                WHERE id = ?
-            """, (titulo, genero, duracion, imagen, pelicula_completa, id))
+                UPDATE peliculas_completas
+                SET titulo = %s, genero = %s, duracion = %s, imagen = %s, ruta_video = %s
+                WHERE id = %s
+            """, (titulo, genero, duracion, imagen, ruta_video, id))
         elif imagen:
             cursor.execute("""
-                UPDATE Peliculas_Completas 
-                SET titulo = ?, genero = ?, duracion = ?, imagen = ? 
-                WHERE id = ?
+                UPDATE peliculas_completas
+                SET titulo = %s, genero = %s, duracion = %s, imagen = %s
+                WHERE id = %s
             """, (titulo, genero, duracion, imagen, id))
-        elif pelicula_completa:
+        elif ruta_video:
             cursor.execute("""
-                UPDATE Peliculas_Completas 
-                SET titulo = ?, genero = ?, duracion = ?, pelicula_completa = ? 
-                WHERE id = ?
-            """, (titulo, genero, duracion, pelicula_completa, id))
+                UPDATE peliculas_completas
+                SET titulo = %s, genero = %s, duracion = %s, ruta_video = %s
+                WHERE id = %s
+            """, (titulo, genero, duracion, ruta_video, id))
         else:
             cursor.execute("""
-                UPDATE Peliculas_Completas 
-                SET titulo = ?, genero = ?, duracion = ? 
-                WHERE id = ?
+                UPDATE peliculas_completas
+                SET titulo = %s, genero = %s, duracion = %s
+                WHERE id = %s
             """, (titulo, genero, duracion, id))
 
         # Confirmar cambios
         conn.commit()
         conn.close()
 
+        # Limpiar caché de cartelera para que se vea de inmediato
+        try:
+            cache.clear()
+        except Exception:
+            pass
+
         flash('Película completa editada con éxito', 'success')
         return redirect(url_for('admin'))
 
-    # Cerrar conexión si es un método GET
     conn.close()
+    return render_template(
+        'editar_pelicula_completa.html',
+        pelicula=pelicula,
+        id=id,
+        logo_url=url_for('obtener_logo')
+    )
 
-    return render_template('editar_pelicula_completa.html', 
-                           pelicula=pelicula, 
-                           id=id, 
-                           logo_url=url_for('obtener_logo'))
 
 
 
@@ -925,10 +975,10 @@ def obtener_chats():
                 (SELECT MAX(timestamp) FROM Mensajes 
                  WHERE (sender_email = ? AND receiver_email = contact_email) 
                     OR (sender_email = contact_email AND receiver_email = ?)) as last_time,
-                (SELECT TOP 1 contenido FROM Mensajes 
+                (SELECT contenido FROM Mensajes 
                 WHERE ((sender_email = ? AND receiver_email = contact_email) 
                     OR (sender_email = contact_email AND receiver_email = ?))
-                ORDER BY timestamp DESC) as last_message
+                ORDER BY timestamp DESC LIMIT 1) as last_message
 
             FROM Mensajes
             WHERE sender_email = ? OR receiver_email = ?
@@ -947,10 +997,10 @@ def obtener_chats():
                 (SELECT MAX(timestamp) FROM Mensajes 
                  WHERE (sender_email = ? AND receiver_email = contact_email) 
                     OR (sender_email = contact_email AND receiver_email = ?)) as last_time,
-                (SELECT TOP 1 contenido FROM Mensajes 
+                (SELECT contenido FROM Mensajes 
                 WHERE ((sender_email = ? AND receiver_email = contact_email) 
                     OR (sender_email = contact_email AND receiver_email = ?))
-                ORDER BY timestamp DESC)
+                ORDER BY timestamp DESC LIMIT 1)
 
             FROM Mensajes
             WHERE (sender_email = ? OR receiver_email = ?)
@@ -1059,7 +1109,7 @@ def enviar_mensaje():
         # Insertar el mensaje
         cursor.execute("""
             INSERT INTO Mensajes (sender_email, receiver_email, contenido, timestamp, visible_para_sender, visible_para_receiver)
-            VALUES (?, ?, ?, GETDATE(), 1, 1)
+            VALUES (%s, %s, %s, NOW(), 1, 1)
         """, (current_user.email, receiver, contenido))
         
         conn.commit()
@@ -1079,7 +1129,7 @@ def enviar_mensaje():
             for admin in admins:
                 cursor.execute("""
                     INSERT INTO Mensajes (sender_email, receiver_email, contenido, timestamp, visible_para_sender, visible_para_receiver)
-                    VALUES (?, ?, ?, GETDATE(), 1, 1)
+                    VALUES (%s, %s, %s, NOW(), 1, 1)
                 """, (current_user.email, admin[0], contenido))
             
             conn.commit()
