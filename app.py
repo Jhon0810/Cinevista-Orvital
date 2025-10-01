@@ -24,7 +24,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "e0436a748be72d21e0ddc8cf63fa2d2c17f4c8a72f7ccf0b568e02b6b3db4ed9")
 
 # ✅ Configuración para PostgreSQL con SQLAlchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://postgres:RTJh0n_2025@localhost:5432/CineDB'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg2://cine_cg13_user:jqX552JwRvrwKzEV2xRmie6X30mrb3Fm@dpg-d3en8rqli9vc739tl64g-a.oregon-postgres.render.com:5432/cine_cg13'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
@@ -44,10 +44,10 @@ logging.info("Servidor Flask iniciado correctamente.")
 def get_db_connection():
     try:
         connection = psycopg2.connect(
-            host="localhost",
-            database="CineDB",
-            user="postgres",          # ← Cambiar por tu usuario
-            password="RTJh0n_2025", # ← Cambiar por tu contraseña
+            host="dpg-d3en8rqli9vc739tl64g-a.oregon-postgres.render.com",
+            database="cine_cg13",
+            user="cine_cg13_user",
+            password="jqX552JwRvrwKzEV2xRmie6X30mrb3Fm",
             port="5432"
         )
         logging.info("Conexión exitosa a PostgreSQL.")
